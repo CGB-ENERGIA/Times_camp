@@ -2,11 +2,38 @@ import type { RouteRecordRaw } from 'vue-router';
 
 const routes: RouteRecordRaw[] = [
   {
+    path: '/login',
+    component: () => import('@/pages/LoginPage.vue'),
+    meta: { public: true },
+  },
+
+  {
     path: '/',
     component: () => import('@/layouts/MainLayout.vue'),
+    meta: { requiresAuth: true },
     children: [
-      { path: '', component: () => import('@/pages/IndexPage.vue') },
-      { path: 'second', component: () => import('@/pages/SecondPage.vue') }
+      { path: '', component: () => import('@/pages/MonitoramentoPage.vue') },
+      {
+        path: 'lancar-saida',
+        component: () => import('@/pages/LancarSaidaPage.vue'),
+        meta: { roles: ['tecnico'] },
+      },
+      { path: 'historico', component: () => import('@/pages/HistoricoPage.vue') },
+      {
+        path: 'admin/bases',
+        component: () => import('@/pages/admin/BasesPage.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'admin/equipes',
+        component: () => import('@/pages/admin/EquipesPage.vue'),
+        meta: { roles: ['admin'] },
+      },
+      {
+        path: 'admin/usuarios',
+        component: () => import('@/pages/admin/UsuariosPage.vue'),
+        meta: { roles: ['admin'] },
+      },
     ],
   },
 

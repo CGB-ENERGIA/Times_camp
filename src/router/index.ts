@@ -7,6 +7,7 @@ import {
 } from 'vue-router';
 
 import routes from './routes';
+import { useAuthStore, type Role } from '@/stores/auth';
 
 /*
  * If not building with SSR mode, you can
@@ -30,6 +31,32 @@ export default defineRouter((/* { store, ssrContext } */) => {
     // quasar.conf.js -> build -> vueRouterMode
     // quasar.conf.js -> build -> publicPath
     history: createHistory(import.meta.env.QUASAR_VUE_ROUTER_BASE)
+  });
+
+  Router.beforeEach(async (to) => {
+    const authStore = useAuthStore();
+
+    if (!authStore.ready) {
+      await authStore.fetchMe();
+    }
+
+    if (to.meta.public) {
+      if (authStore.isAuthenticated && to.path === '/login') {
+        return '/';
+      }
+      return true;
+    }
+
+    if (!authStore.isAuthenticated) {
+      return '/login';
+    }
+
+    const roles = to.meta.roles as Role[] | undefined;
+    if (roles && !roles.includes(authStore.user!.role)) {
+      return '/';
+    }
+
+    return true;
   });
 
   return Router;

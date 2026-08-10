@@ -2,40 +2,58 @@
   <q-layout view="lHh Lpr lFf">
     <q-header elevated>
       <q-toolbar>
-        <q-btn
-          flat
-          dense
-          round
-          icon="menu"
-          aria-label="Menu"
-          @click="toggleLeftDrawer"
-        />
+        <q-btn flat dense round icon="menu" aria-label="Menu" @click="toggleLeftDrawer" />
 
-        <q-toolbar-title>
-          Quasar App
-        </q-toolbar-title>
+        <q-toolbar-title> Saída de Equipes </q-toolbar-title>
 
-        <div>Quasar v{{ $q.version }}</div>
+        <div class="q-mr-md text-caption">
+          {{ authStore.user?.nome }}
+          <q-badge outline color="white" class="q-ml-xs">
+            {{ authStore.user?.role === 'admin' ? 'Admin' : 'Técnico' }}
+          </q-badge>
+        </div>
+        <q-btn flat dense round icon="logout" aria-label="Sair" @click="onLogout" />
       </q-toolbar>
     </q-header>
 
-    <q-drawer
-      v-model="leftDrawerOpen"
-      show-if-above
-      bordered
-    >
+    <q-drawer v-model="leftDrawerOpen" show-if-above bordered>
       <q-list>
-        <q-item-label
-          header
-        >
-          Essential Links
-        </q-item-label>
+        <q-item-label header>Navegação</q-item-label>
 
-        <EssentialLink
-          v-for="link in linksList"
-          :key="link.label"
-          v-bind="link"
-        />
+        <q-item to="/" exact clickable v-ripple>
+          <q-item-section avatar><q-icon name="dashboard" /></q-item-section>
+          <q-item-section>Monitoramento</q-item-section>
+        </q-item>
+
+        <q-item v-if="authStore.isTecnico" to="/lancar-saida" clickable v-ripple>
+          <q-item-section avatar><q-icon name="directions_walk" /></q-item-section>
+          <q-item-section>Lançar Saída</q-item-section>
+        </q-item>
+
+        <q-item to="/historico" clickable v-ripple>
+          <q-item-section avatar><q-icon name="history" /></q-item-section>
+          <q-item-section>Histórico</q-item-section>
+        </q-item>
+
+        <template v-if="authStore.isAdmin">
+          <q-separator class="q-my-sm" />
+          <q-item-label header>Administração</q-item-label>
+
+          <q-item to="/admin/bases" clickable v-ripple>
+            <q-item-section avatar><q-icon name="apartment" /></q-item-section>
+            <q-item-section>Bases</q-item-section>
+          </q-item>
+
+          <q-item to="/admin/equipes" clickable v-ripple>
+            <q-item-section avatar><q-icon name="groups" /></q-item-section>
+            <q-item-section>Equipes</q-item-section>
+          </q-item>
+
+          <q-item to="/admin/usuarios" clickable v-ripple>
+            <q-item-section avatar><q-icon name="badge" /></q-item-section>
+            <q-item-section>Usuários</q-item-section>
+          </q-item>
+        </template>
       </q-list>
     </q-drawer>
 
@@ -47,56 +65,19 @@
 
 <script setup lang="ts">
 import { ref } from 'vue';
-import EssentialLink, { type EssentialLinkProps } from '@/components/EssentialLink.vue';
-
-const linksList: EssentialLinkProps[] = [
-  {
-    label: 'Docs',
-    caption: 'quasar.dev',
-    icon: 'school',
-    link: 'https://quasar.dev'
-  },
-  {
-    label: 'GitHub',
-    caption: 'github.com/quasarframework',
-    icon: 'code',
-    link: 'https://github.com/quasarframework'
-  },
-  {
-    label: 'Discord Chat Channel',
-    caption: 'chat.quasar.dev',
-    icon: 'chat',
-    link: 'https://chat.quasar.dev'
-  },
-  {
-    label: 'Forum',
-    caption: 'forum.quasar.dev',
-    icon: 'record_voice_over',
-    link: 'https://forum.quasar.dev'
-  },
-  {
-    label: 'Twitter',
-    caption: '@quasarframework',
-    icon: 'rss_feed',
-    link: 'https://twitter.quasar.dev'
-  },
-  {
-    label: 'Facebook',
-    caption: '@QuasarFramework',
-    icon: 'public',
-    link: 'https://facebook.quasar.dev'
-  },
-  {
-    label: 'Quasar Awesome',
-    caption: 'Community Quasar projects',
-    icon: 'favorite',
-    link: 'https://awesome.quasar.dev'
-  }
-];
+import { useRouter } from 'vue-router';
+import { useAuthStore } from '@/stores/auth';
 
 const leftDrawerOpen = ref(false);
+const authStore = useAuthStore();
+const router = useRouter();
 
-function toggleLeftDrawer () {
+function toggleLeftDrawer() {
   leftDrawerOpen.value = !leftDrawerOpen.value;
+}
+
+async function onLogout() {
+  await authStore.logout();
+  await router.push('/login');
 }
 </script>
