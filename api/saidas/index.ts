@@ -11,10 +11,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     const equipeId = req.query.equipeId ? Number(req.query.equipeId) : null;
     const dataInicio = (req.query.dataInicio as string) || null;
     const dataFim = (req.query.dataFim as string) || null;
+    const limite = Math.min(Math.max(Number(req.query.limit) || 500, 1), 10000);
 
     const registros = await sql`
       select
         s.id, s.equipe_id, e.identificador, e.tipo, e.base_id, b.nome as base_nome,
+        e.horario_padrao_saida, e.supervisor, e.coordenador,
         s.data, s.hora_saida, s.observacao, u.nome as registrado_por_nome
       from saidas s
       join equipes e on e.id = s.equipe_id
@@ -25,7 +27,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         and (${dataInicio}::date is null or s.data >= ${dataInicio})
         and (${dataFim}::date is null or s.data <= ${dataFim})
       order by s.data desc, b.nome, e.identificador
-      limit 500
+      limit ${limite}
     `;
     res.status(200).json(registros);
     return;
@@ -41,15 +43,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const equipeRows = await sql`select id, base_id from equipes where id = ${equipeId}`;
+    const equipeRows = await sql`select id, base_id, supervisor, coordenador from equipes where id = ${equipeId}`;
     const equipe = equipeRows[0];
     if (!equipe) {
       res.status(404).json({ error: 'Equipe não encontrada' });
       return;
     }
 
-    if (session.role === 'tecnico' && equipe.base_id !== session.baseId) {
-      res.status(403).json({ error: 'Você só pode registrar saídas da sua base' });
+    if (session.role === 'tecnico' && (!session.supervisor || equipe.supervisor !== session.supervisor)) {
+      res.status(403).json({ error: 'Você só pode registrar saídas de equipes do seu supervisor' });
+      return;
+    }
+
+    if (session.role === 'coordenador' && (!session.coordenador || equipe.coordenador !== session.coordenador)) {
+      res.status(403).json({ error: 'Você só pode registrar saídas de equipes do seu coordenador' });
       return;
     }
 

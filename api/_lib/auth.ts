@@ -9,7 +9,7 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET: string = process.env.JWT_SECRET;
 
-export type Role = 'admin' | 'tecnico';
+export type Role = 'admin' | 'tecnico' | 'coordenador';
 
 export interface SessionPayload {
   usuarioId: number;
@@ -17,6 +17,8 @@ export interface SessionPayload {
   nome: string;
   role: Role;
   baseId: number | null;
+  supervisor: string | null;
+  coordenador: string | null;
 }
 
 export function signSession(payload: SessionPayload): string {

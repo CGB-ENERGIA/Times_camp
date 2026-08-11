@@ -47,7 +47,10 @@
             :disable="!!editando"
           />
           <q-select v-model="forma.tipo" :options="tipos" label="Tipo" filled />
-          <q-input v-model="forma.identificador" label="Identificador (ex: LM-01)" filled />
+          <q-input v-model="forma.identificador" label="Nome da equipe (ex: MA-BCB-D001M)" filled />
+          <q-input v-model="forma.horarioPadrao" label="Horário de saída padrão" type="time" filled />
+          <q-input v-model="forma.supervisor" label="Supervisor" filled />
+          <q-input v-model="forma.coordenador" label="Coordenador" filled />
           <q-toggle v-if="editando" v-model="forma.ativo" label="Ativa" />
         </q-card-section>
         <q-card-actions align="right">
@@ -69,6 +72,9 @@ interface Equipe {
   base_id: number;
   tipo: string;
   identificador: string;
+  horario_padrao_saida: string;
+  supervisor: string | null;
+  coordenador: string | null;
   ativo: boolean;
 }
 
@@ -77,7 +83,7 @@ interface Base {
   nome: string;
 }
 
-const tipos = ['LM', 'LV', 'PODA', 'TAT'];
+const tipos = ['GERE', 'GOMAN', 'GSTC'];
 
 const equipes = ref<Equipe[]>([]);
 const opcoesBase = ref<Array<{ label: string; value: number }>>([]);
@@ -86,9 +92,18 @@ const carregando = ref(false);
 const dialogoAberto = ref(false);
 const editando = ref<Equipe | null>(null);
 const salvando = ref(false);
-const forma = ref({ baseId: null as number | null, tipo: 'LM', identificador: '', ativo: true });
+const forma = ref({
+  baseId: null as number | null,
+  tipo: 'GERE',
+  identificador: '',
+  horarioPadrao: '08:30',
+  supervisor: '',
+  coordenador: '',
+  ativo: true,
+});
 
 const colunas: QTableColumn[] = [
+  { name: 'identificador', label: 'Nome', field: 'identificador', align: 'left', sortable: true },
   {
     name: 'base',
     label: 'Base',
@@ -96,7 +111,15 @@ const colunas: QTableColumn[] = [
     align: 'left',
   },
   { name: 'tipo', label: 'Tipo', field: 'tipo', align: 'left', sortable: true },
-  { name: 'identificador', label: 'Identificador', field: 'identificador', align: 'left', sortable: true },
+  {
+    name: 'horario_padrao_saida',
+    label: 'Horário de Saída',
+    field: (row: Equipe) => row.horario_padrao_saida?.slice(0, 5),
+    align: 'left',
+    sortable: true,
+  },
+  { name: 'supervisor', label: 'Supervisor', field: 'supervisor', align: 'left', sortable: true },
+  { name: 'coordenador', label: 'Coordenador', field: 'coordenador', align: 'left', sortable: true },
   { name: 'ativo', label: 'Status', field: 'ativo', align: 'left' },
   { name: 'acoes', label: '', field: 'id', align: 'right' },
 ];
@@ -120,7 +143,15 @@ async function carregar() {
 
 function abrirNovo() {
   editando.value = null;
-  forma.value = { baseId: filtroBaseId.value, tipo: 'LM', identificador: '', ativo: true };
+  forma.value = {
+    baseId: filtroBaseId.value,
+    tipo: 'GERE',
+    identificador: '',
+    horarioPadrao: '08:30',
+    supervisor: '',
+    coordenador: '',
+    ativo: true,
+  };
   dialogoAberto.value = true;
 }
 
@@ -130,6 +161,9 @@ function abrirEdicao(equipe: Equipe) {
     baseId: equipe.base_id,
     tipo: equipe.tipo,
     identificador: equipe.identificador,
+    horarioPadrao: equipe.horario_padrao_saida.slice(0, 5),
+    supervisor: equipe.supervisor ?? '',
+    coordenador: equipe.coordenador ?? '',
     ativo: equipe.ativo,
   };
   dialogoAberto.value = true;
@@ -142,6 +176,9 @@ async function salvar() {
       await api.put(`/equipes/${editando.value.id}`, {
         tipo: forma.value.tipo,
         identificador: forma.value.identificador,
+        horarioPadrao: forma.value.horarioPadrao,
+        supervisor: forma.value.supervisor,
+        coordenador: forma.value.coordenador,
         ativo: forma.value.ativo,
       });
     } else {
@@ -149,6 +186,9 @@ async function salvar() {
         baseId: forma.value.baseId,
         tipo: forma.value.tipo,
         identificador: forma.value.identificador,
+        horarioPadrao: forma.value.horarioPadrao,
+        supervisor: forma.value.supervisor,
+        coordenador: forma.value.coordenador,
       });
     }
     dialogoAberto.value = false;

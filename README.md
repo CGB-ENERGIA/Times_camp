@@ -1,4 +1,4 @@
-# Painel de Saída de Equipes (LM/LV/PODA/TAT)
+# TimeTrack — Saída de Equipes (GERE/GOMAN/GSTC)
 
 Site para o técnico de obras informar a saída das equipes de campo e para a
 gestão acompanhar em tempo real quem saiu até 08:30 e quem não saiu, por
@@ -63,9 +63,10 @@ do projeto. O build usa Bun (`vercel.json`).
 
 ## Perfis
 
-- **admin**: cadastra bases, equipes e usuários (técnicos/admins).
-- **técnico**: vinculado a uma base, lança e edita a saída das equipes da
-  própria base.
+- **admin**: cadastra bases, equipes e usuários (técnicos/admins); também
+  acessa o Apontamento de qualquer base (escolhe a base na própria tela).
+- **técnico**: vinculado a uma base, apontar e edita a saída das equipes da
+  própria base, na tela **Apontamento**.
 
-Login é obrigatório tanto para lançar saída quanto para ver o painel de
+Login é obrigatório tanto para apontar saída quanto para ver o painel de
 Monitoramento e o Histórico.

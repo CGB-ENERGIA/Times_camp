@@ -3,7 +3,7 @@ import { sql } from '../_lib/db.js';
 import { requireAuth } from '../_lib/auth.js';
 import { hashPassword } from '../_lib/hash.js';
 
-const ROLES = ['admin', 'tecnico'];
+const ROLES = ['admin', 'tecnico', 'coordenador'];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   const session = requireAuth(req, res, 'admin');
@@ -11,7 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     const usuarios = await sql`
-      select id, nome, usuario, role, base_id, ativo, created_at
+      select id, nome, usuario, role, base_id, supervisor, coordenador, ativo, created_at
       from usuarios
       order by nome
     `;
@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { nome, usuario, senha, role, baseId } = req.body || {};
+    const { nome, usuario, senha, role, supervisor, coordenador } = req.body || {};
     if (!nome || !usuario || !senha || !role) {
       res.status(400).json({ error: 'Informe nome, usuário, senha e perfil' });
       return;
@@ -29,8 +29,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(400).json({ error: `Perfil inválido. Use um de: ${ROLES.join(', ')}` });
       return;
     }
-    if (role === 'tecnico' && !baseId) {
-      res.status(400).json({ error: 'Técnico precisa estar vinculado a uma base' });
+    if (role === 'tecnico' && !supervisor) {
+      res.status(400).json({ error: 'Técnico precisa estar vinculado a um supervisor' });
+      return;
+    }
+    if (role === 'coordenador' && !coordenador) {
+      res.status(400).json({ error: 'Coordenador precisa estar vinculado a um coordenador' });
       return;
     }
 
@@ -38,9 +42,14 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const [novo] = await sql`
-        insert into usuarios (nome, usuario, senha_hash, role, base_id, ativo)
-        values (${nome}, ${usuario}, ${senhaHash}, ${role}, ${role === 'admin' ? null : baseId}, true)
-        returning id, nome, usuario, role, base_id, ativo, created_at
+        insert into usuarios (nome, usuario, senha_hash, role, supervisor, coordenador, ativo)
+        values (
+          ${nome}, ${usuario}, ${senhaHash}, ${role},
+          ${role === 'tecnico' ? supervisor : null},
+          ${role === 'coordenador' ? coordenador : null},
+          true
+        )
+        returning id, nome, usuario, role, base_id, supervisor, coordenador, ativo, created_at
       `;
       res.status(201).json(novo);
     } catch (err) {

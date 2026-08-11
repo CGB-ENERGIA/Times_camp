@@ -2,7 +2,7 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '../_lib/db.js';
 import { requireAuth } from '../_lib/auth.js';
 
-const TIPOS = ['LM', 'LV', 'PODA', 'TAT'];
+const TIPOS = ['GERE', 'GOMAN', 'GSTC'];
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method !== 'PUT') {
@@ -19,7 +19,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { tipo, identificador, ativo } = req.body || {};
+  const { tipo, identificador, horarioPadrao, supervisor, coordenador, ativo } = req.body || {};
   if (tipo && !TIPOS.includes(tipo)) {
     res.status(400).json({ error: `Tipo inválido. Use um de: ${TIPOS.join(', ')}` });
     return;
@@ -30,9 +30,12 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     set
       tipo = coalesce(${tipo ?? null}, tipo),
       identificador = coalesce(${identificador ?? null}, identificador),
+      horario_padrao_saida = coalesce(${horarioPadrao ?? null}, horario_padrao_saida),
+      supervisor = coalesce(${supervisor ?? null}, supervisor),
+      coordenador = coalesce(${coordenador ?? null}, coordenador),
       ativo = coalesce(${ativo ?? null}, ativo)
     where id = ${id}
-    returning id, base_id, tipo, identificador, ativo
+    returning id, base_id, tipo, identificador, horario_padrao_saida, supervisor, coordenador, ativo
   `;
 
   if (rows.length === 0) {

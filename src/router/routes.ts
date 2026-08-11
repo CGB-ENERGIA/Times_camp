@@ -14,9 +14,9 @@ const routes: RouteRecordRaw[] = [
     children: [
       { path: '', component: () => import('@/pages/MonitoramentoPage.vue') },
       {
-        path: 'lancar-saida',
-        component: () => import('@/pages/LancarSaidaPage.vue'),
-        meta: { roles: ['tecnico'] },
+        path: 'apontamento',
+        component: () => import('@/pages/ApontamentoPage.vue'),
+        meta: { roles: ['tecnico', 'admin', 'coordenador'] },
       },
       { path: 'historico', component: () => import('@/pages/HistoricoPage.vue') },
       {

@@ -1,8 +1,8 @@
--- Schema para o painel de saída de equipes de campo (LM/LV/PODA/TAT)
+-- Schema para o painel de saída de equipes de campo (GERE/GOMAN/GSTC)
 -- Rodar uma vez no banco Neon (SQL editor do console Neon, ou via psql/neon cli)
 
-create type equipe_tipo as enum ('LM', 'LV', 'PODA', 'TAT');
-create type user_role as enum ('admin', 'tecnico');
+create type equipe_tipo as enum ('GERE', 'GOMAN', 'GSTC');
+create type user_role as enum ('admin', 'tecnico', 'coordenador');
 
 create table bases (
   id serial primary key,
@@ -18,6 +18,8 @@ create table usuarios (
   senha_hash text not null,
   role user_role not null,
   base_id integer references bases(id),
+  supervisor text,
+  coordenador text,
   ativo boolean not null default true,
   created_at timestamptz not null default now()
 );
@@ -27,6 +29,9 @@ create table equipes (
   base_id integer not null references bases(id),
   tipo equipe_tipo not null,
   identificador text not null,
+  horario_padrao_saida time not null default '08:30:00',
+  supervisor text,
+  coordenador text,
   ativo boolean not null default true,
   unique (base_id, identificador)
 );

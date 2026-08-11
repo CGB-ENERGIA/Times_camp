@@ -9,7 +9,7 @@
     <q-table :rows="usuarios" :columns="colunas" row-key="id" :loading="carregando" flat bordered>
       <template #body-cell-role="props">
         <q-td :props="props">
-          <q-badge :color="props.row.role === 'admin' ? 'purple' : 'primary'" :label="props.row.role === 'admin' ? 'Admin' : 'Técnico'" />
+          <q-badge :color="corPerfil(props.row.role)" :label="rotuloPerfil(props.row.role)" />
         </q-td>
       </template>
       <template #body-cell-ativo="props">
@@ -34,18 +34,25 @@
           <q-input v-model="forma.usuario" label="Usuário (login)" filled :disable="!!editando" />
           <q-select
             v-model="forma.role"
-            :options="['admin', 'tecnico']"
+            :options="['admin', 'tecnico', 'coordenador']"
             label="Perfil"
             filled
             :disable="!!editando"
           />
           <q-select
             v-if="forma.role === 'tecnico'"
-            v-model="forma.baseId"
-            :options="opcoesBase"
-            emit-value
-            map-options
-            label="Base"
+            v-model="forma.supervisor"
+            :options="opcoesSupervisor"
+            label="Supervisor"
+            hint="O técnico só verá e apontará as equipes desse supervisor"
+            filled
+          />
+          <q-select
+            v-if="forma.role === 'coordenador'"
+            v-model="forma.coordenador"
+            :options="opcoesCoordenador"
+            label="Coordenador"
+            hint="O coordenador só verá e apontará as equipes desse coordenador"
             filled
           />
           <q-input
@@ -70,22 +77,27 @@ import { ref, onMounted } from 'vue';
 import type { QTableColumn } from 'quasar';
 import { api } from '@/boot/axios';
 
+type Role = 'admin' | 'tecnico' | 'coordenador';
+
 interface Usuario {
   id: number;
   nome: string;
   usuario: string;
-  role: 'admin' | 'tecnico';
+  role: Role;
   base_id: number | null;
+  supervisor: string | null;
+  coordenador: string | null;
   ativo: boolean;
 }
 
-interface Base {
-  id: number;
-  nome: string;
+interface Equipe {
+  supervisor: string | null;
+  coordenador: string | null;
 }
 
 const usuarios = ref<Usuario[]>([]);
-const opcoesBase = ref<Array<{ label: string; value: number }>>([]);
+const opcoesSupervisor = ref<string[]>([]);
+const opcoesCoordenador = ref<string[]>([]);
 const carregando = ref(false);
 const dialogoAberto = ref(false);
 const editando = ref<Usuario | null>(null);
@@ -93,8 +105,9 @@ const salvando = ref(false);
 const forma = ref({
   nome: '',
   usuario: '',
-  role: 'tecnico' as 'admin' | 'tecnico',
-  baseId: null as number | null,
+  role: 'tecnico' as Role,
+  supervisor: null as string | null,
+  coordenador: null as string | null,
   senha: '',
   ativo: true,
 });
@@ -103,19 +116,27 @@ const colunas: QTableColumn[] = [
   { name: 'nome', label: 'Nome', field: 'nome', align: 'left', sortable: true },
   { name: 'usuario', label: 'Usuário', field: 'usuario', align: 'left', sortable: true },
   { name: 'role', label: 'Perfil', field: 'role', align: 'left' },
-  {
-    name: 'base',
-    label: 'Base',
-    field: (row: Usuario) => opcoesBase.value.find((b) => b.value === row.base_id)?.label ?? '—',
-    align: 'left',
-  },
+  { name: 'supervisor', label: 'Supervisor', field: 'supervisor', align: 'left', sortable: true },
+  { name: 'coordenador', label: 'Coordenador', field: 'coordenador', align: 'left', sortable: true },
   { name: 'ativo', label: 'Status', field: 'ativo', align: 'left' },
   { name: 'acoes', label: '', field: 'id', align: 'right' },
 ];
 
-async function carregarBases() {
-  const { data } = await api.get<Base[]>('/bases');
-  opcoesBase.value = data.map((b) => ({ label: b.nome, value: b.id }));
+const ROTULOS_PERFIL: Record<Role, string> = { admin: 'Admin', tecnico: 'Técnico', coordenador: 'Coordenador' };
+const CORES_PERFIL: Record<Role, string> = { admin: 'purple', tecnico: 'primary', coordenador: 'teal' };
+
+function rotuloPerfil(role: Role) {
+  return ROTULOS_PERFIL[role];
+}
+
+function corPerfil(role: Role) {
+  return CORES_PERFIL[role];
+}
+
+async function carregarSupervisores() {
+  const { data } = await api.get<Equipe[]>('/equipes');
+  opcoesSupervisor.value = [...new Set(data.map((e) => e.supervisor).filter((v): v is string => !!v))].sort();
+  opcoesCoordenador.value = [...new Set(data.map((e) => e.coordenador).filter((v): v is string => !!v))].sort();
 }
 
 async function carregar() {
@@ -130,7 +151,7 @@ async function carregar() {
 
 function abrirNovo() {
   editando.value = null;
-  forma.value = { nome: '', usuario: '', role: 'tecnico', baseId: null, senha: '', ativo: true };
+  forma.value = { nome: '', usuario: '', role: 'tecnico', supervisor: null, coordenador: null, senha: '', ativo: true };
   dialogoAberto.value = true;
 }
 
@@ -140,7 +161,8 @@ function abrirEdicao(usuario: Usuario) {
     nome: usuario.nome,
     usuario: usuario.usuario,
     role: usuario.role,
-    baseId: usuario.base_id,
+    supervisor: usuario.supervisor,
+    coordenador: usuario.coordenador,
     senha: '',
     ativo: usuario.ativo,
   };
@@ -153,7 +175,8 @@ async function salvar() {
     if (editando.value) {
       await api.put(`/usuarios/${editando.value.id}`, {
         nome: forma.value.nome,
-        baseId: forma.value.role === 'tecnico' ? forma.value.baseId : null,
+        supervisor: forma.value.role === 'tecnico' ? forma.value.supervisor : null,
+        coordenador: forma.value.role === 'coordenador' ? forma.value.coordenador : null,
         ativo: forma.value.ativo,
         senha: forma.value.senha || undefined,
       });
@@ -163,7 +186,8 @@ async function salvar() {
         usuario: forma.value.usuario,
         senha: forma.value.senha,
         role: forma.value.role,
-        baseId: forma.value.baseId,
+        supervisor: forma.value.supervisor,
+        coordenador: forma.value.coordenador,
       });
     }
     dialogoAberto.value = false;
@@ -174,7 +198,7 @@ async function salvar() {
 }
 
 onMounted(async () => {
-  await carregarBases();
+  await carregarSupervisores();
   await carregar();
 });
 </script>

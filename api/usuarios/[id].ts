@@ -18,18 +18,19 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { nome, baseId, ativo, senha } = req.body || {};
+  const { nome, supervisor, coordenador, ativo, senha } = req.body || {};
   const senhaHash = senha ? await hashPassword(senha) : null;
 
   const rows = await sql`
     update usuarios
     set
       nome = coalesce(${nome ?? null}, nome),
-      base_id = case when ${baseId === undefined} then base_id else ${baseId ?? null} end,
+      supervisor = case when ${supervisor === undefined} then supervisor else ${supervisor ?? null} end,
+      coordenador = case when ${coordenador === undefined} then coordenador else ${coordenador ?? null} end,
       ativo = coalesce(${ativo ?? null}, ativo),
       senha_hash = coalesce(${senhaHash}, senha_hash)
     where id = ${id}
-    returning id, nome, usuario, role, base_id, ativo, created_at
+    returning id, nome, usuario, role, base_id, supervisor, coordenador, ativo, created_at
   `;
 
   if (rows.length === 0) {

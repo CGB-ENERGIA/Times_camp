@@ -2,8 +2,6 @@ import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from './_lib/db.js';
 import { requireAuth } from './_lib/auth.js';
 
-const LIMITE_SAIDA = '08:30:00';
-
 function hojeBrasil(): string {
   const fmt = new Intl.DateTimeFormat('en-CA', {
     timeZone: 'America/Sao_Paulo',
@@ -28,7 +26,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   const linhas = await sql`
     select
       b.id as base_id, b.nome as base_nome,
-      e.id as equipe_id, e.tipo, e.identificador,
+      e.id as equipe_id, e.tipo, e.identificador, e.horario_padrao_saida, e.supervisor, e.coordenador,
       s.hora_saida, s.observacao, u.nome as registrado_por_nome
     from bases b
     join equipes e on e.base_id = b.id and e.ativo = true
@@ -47,6 +45,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         equipeId: number;
         tipo: string;
         identificador: string;
+        horarioPadrao: string;
+        supervisor: string | null;
+        coordenador: string | null;
         horaSaida: string | null;
         observacao: string | null;
         registradoPor: string | null;
@@ -66,7 +67,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     const status: 'no_prazo' | 'atrasado' | 'pendente' = !linha.hora_saida
       ? 'pendente'
-      : linha.hora_saida <= LIMITE_SAIDA
+      : linha.hora_saida <= linha.horario_padrao_saida
         ? 'no_prazo'
         : 'atrasado';
 
@@ -74,6 +75,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       equipeId: linha.equipe_id,
       tipo: linha.tipo,
       identificador: linha.identificador,
+      horarioPadrao: linha.horario_padrao_saida,
+      supervisor: linha.supervisor,
+      coordenador: linha.coordenador,
       horaSaida: linha.hora_saida,
       observacao: linha.observacao,
       registradoPor: linha.registrado_por_nome,
@@ -83,7 +87,6 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   res.status(200).json({
     data,
-    limiteSaida: LIMITE_SAIDA.slice(0, 5),
     bases: Array.from(basesMap.values()),
   });
 }

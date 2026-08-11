@@ -12,6 +12,7 @@ export default defineConfig((/* ctx */) => {
     // --> boot files are part of "main.js"
     // https://v2.quasar.dev/quasar-cli-vite/boot-files
     boot: [
+      'dark-mode',
       'axios',
     ],
 
@@ -72,7 +73,8 @@ export default defineConfig((/* ctx */) => {
     devServer: {
       // vueDevtools: true,
       // https: true,
-      open: true, // opens browser window automatically
+      ...(process.env.PREVIEW_PORT ? { port: Number(process.env.PREVIEW_PORT) } : {}),
+      open: !process.env.PREVIEW_PORT, // opens browser window automatically
       proxy: {
         // Aponta para `bun run dev:api` (ou `PORT=xxxx bun run dev:api`)
         '/api': {
@@ -84,7 +86,9 @@ export default defineConfig((/* ctx */) => {
 
     // https://v2.quasar.dev/quasar-cli-vite/quasar-config-file#framework
     framework: {
-      config: {},
+      config: {
+        dark: true, // tema escuro por padrão; o usuário pode trocar (ver src/boot/dark-mode.ts)
+      },
 
       // iconSet: 'material-icons', // Quasar icon set
       // lang: 'en-US', // Quasar language pack

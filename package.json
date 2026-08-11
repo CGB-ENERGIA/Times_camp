@@ -1,8 +1,8 @@
 {
   "name": "times-camp",
   "version": "0.0.1",
-  "description": "A Quasar Project",
-  "productName": "Quasar App",
+  "description": "TimeTrack — saída de equipes de campo (GERE/GOMAN/GSTC)",
+  "productName": "TimeTrack",
   "author": "CGB Engenharia",
   "type": "module",
   "private": true,
@@ -21,11 +21,16 @@
     "@quasar/extras": "^2.0.3",
     "axios": "^1.19.0",
     "bcryptjs": "^3.0.3",
+    "chart.js": "^4.5.1",
     "cookie": "0.6.0",
+    "exceljs": "^4.4.0",
+    "gsap": "^3.15.0",
+    "html2canvas": "^1.4.1",
     "jsonwebtoken": "^9.0.3",
     "pinia": "^4.0.2",
     "quasar": "^2.24.0",
     "vue": "^3.5.22",
+    "vue-chartjs": "^5.3.4",
     "vue-router": "^5.0.6"
   },
   "devDependencies": {
