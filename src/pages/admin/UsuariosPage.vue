@@ -58,9 +58,17 @@
           <q-input
             v-model="forma.senha"
             :label="editando ? 'Nova senha (deixe em branco para manter)' : 'Senha'"
-            type="password"
+            :type="mostrarSenha ? 'text' : 'password'"
             filled
-          />
+          >
+            <template #append>
+              <q-icon
+                :name="mostrarSenha ? 'visibility_off' : 'visibility'"
+                class="cursor-pointer"
+                @click="mostrarSenha = !mostrarSenha"
+              />
+            </template>
+          </q-input>
           <q-toggle v-if="editando" v-model="forma.ativo" label="Ativo" />
         </q-card-section>
         <q-card-actions align="right">
@@ -75,6 +83,8 @@
 <script setup lang="ts">
 import { ref, onMounted } from 'vue';
 import type { QTableColumn } from 'quasar';
+import { useQuasar } from 'quasar';
+import axios from 'axios';
 import { api } from '@/boot/axios';
 
 type Role = 'admin' | 'tecnico' | 'coordenador';
@@ -95,6 +105,8 @@ interface Equipe {
   coordenador: string | null;
 }
 
+const $q = useQuasar();
+
 const usuarios = ref<Usuario[]>([]);
 const opcoesSupervisor = ref<string[]>([]);
 const opcoesCoordenador = ref<string[]>([]);
@@ -102,6 +114,7 @@ const carregando = ref(false);
 const dialogoAberto = ref(false);
 const editando = ref<Usuario | null>(null);
 const salvando = ref(false);
+const mostrarSenha = ref(false);
 const forma = ref({
   nome: '',
   usuario: '',
@@ -151,12 +164,14 @@ async function carregar() {
 
 function abrirNovo() {
   editando.value = null;
+  mostrarSenha.value = false;
   forma.value = { nome: '', usuario: '', role: 'tecnico', supervisor: null, coordenador: null, senha: '', ativo: true };
   dialogoAberto.value = true;
 }
 
 function abrirEdicao(usuario: Usuario) {
   editando.value = usuario;
+  mostrarSenha.value = false;
   forma.value = {
     nome: usuario.nome,
     usuario: usuario.usuario,
@@ -170,6 +185,15 @@ function abrirEdicao(usuario: Usuario) {
 }
 
 async function salvar() {
+  if (forma.value.role === 'tecnico' && !forma.value.supervisor) {
+    $q.notify({ type: 'negative', message: 'Selecione o supervisor do técnico.' });
+    return;
+  }
+  if (forma.value.role === 'coordenador' && !forma.value.coordenador) {
+    $q.notify({ type: 'negative', message: 'Selecione o coordenador.' });
+    return;
+  }
+
   salvando.value = true;
   try {
     if (editando.value) {
@@ -192,6 +216,9 @@ async function salvar() {
     }
     dialogoAberto.value = false;
     await carregar();
+  } catch (err) {
+    const message = axios.isAxiosError(err) ? (err.response?.data as { error?: string })?.error : undefined;
+    $q.notify({ type: 'negative', message: message || 'Não foi possível salvar o usuário.' });
   } finally {
     salvando.value = false;
   }
