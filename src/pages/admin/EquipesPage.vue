@@ -318,7 +318,7 @@ const forma = ref({
 });
 
 const equipesFiltradas = computed(() => {
-  const q = busca.value.toLowerCase().trim();
+  const q = (busca.value ?? '').toLowerCase().trim();
   if (!q) return equipes.value;
   return equipes.value.filter(
     (e) =>
