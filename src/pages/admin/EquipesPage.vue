@@ -1,5 +1,6 @@
 <template>
   <q-page class="q-pa-md">
+    <!-- Cabeçalho -->
     <div class="row items-center q-gutter-sm q-mb-md">
       <div class="text-h6">Equipes</div>
       <q-select
@@ -27,14 +28,71 @@
       </q-input>
       <q-space />
       <div class="text-caption text-grey-6">{{ equipesFiltradas.length }} equipe(s)</div>
+
+      <!-- Importar Excel -->
+      <q-btn-dropdown color="secondary" icon="upload_file" label="Importar" unelevated>
+        <q-list dense>
+          <q-item clickable v-close-popup @click="baixarTemplate">
+            <q-item-section avatar><q-icon name="download" /></q-item-section>
+            <q-item-section>Baixar template</q-item-section>
+          </q-item>
+          <q-item clickable v-close-popup @click="inputExcel?.click()">
+            <q-item-section avatar><q-icon name="upload" /></q-item-section>
+            <q-item-section>Importar planilha</q-item-section>
+          </q-item>
+        </q-list>
+      </q-btn-dropdown>
+      <input ref="inputExcel" type="file" accept=".xlsx" style="display:none" @change="onExcelSelecionado" />
+
       <q-btn color="primary" icon="add" label="Nova equipe" unelevated @click="abrirNovo" />
     </div>
 
+    <!-- Barra de lote (aparece quando há selecionadas) -->
+    <transition name="slide-down">
+      <q-card v-if="selecionadas.length > 0" flat bordered class="q-mb-md bg-blue-grey-10">
+        <q-card-section class="row items-center q-gutter-sm q-pa-sm">
+          <q-icon name="check_box" color="primary" />
+          <span class="text-subtitle2">{{ selecionadas.length }} equipe(s) selecionada(s)</span>
+          <q-separator vertical />
+          <q-input
+            v-model="loteSupervisor"
+            label="Definir supervisor"
+            dense
+            filled
+            clearable
+            style="min-width: 200px"
+            hint="Deixe em branco para não alterar"
+          />
+          <q-input
+            v-model="loteCoordenador"
+            label="Definir coordenador"
+            dense
+            filled
+            clearable
+            style="min-width: 200px"
+            hint="Deixe em branco para não alterar"
+          />
+          <q-btn
+            color="primary"
+            label="Aplicar"
+            :loading="aplicando"
+            :disable="!loteSupervisor && !loteCoordenador"
+            unelevated
+            @click="aplicarLote"
+          />
+          <q-btn flat label="Cancelar" @click="selecionadas = []" />
+        </q-card-section>
+      </q-card>
+    </transition>
+
+    <!-- Tabela -->
     <q-table
+      v-model:selected="selecionadas"
       :rows="equipesFiltradas"
       :columns="colunas"
       row-key="id"
       :loading="carregando"
+      selection="multiple"
       flat
       bordered
       :pagination="{ rowsPerPage: 25, sortBy: 'identificador' }"
@@ -46,19 +104,11 @@
           <q-badge outline color="grey-6" :label="props.row.tipo" />
           <q-popup-edit
             :model-value="props.row.tipo"
-            buttons
-            label-set="Salvar"
-            label-cancel="Cancelar"
+            buttons label-set="Salvar" label-cancel="Cancelar"
             @save="(val) => salvarCampo(props.row, 'tipo', val)"
           >
             <template #default="scope">
-              <q-select
-                v-model="scope.value"
-                :options="tipos"
-                label="Tipo"
-                dense
-                autofocus
-              />
+              <q-select v-model="scope.value" :options="tipos" label="Tipo" dense autofocus />
             </template>
           </q-popup-edit>
         </q-td>
@@ -70,19 +120,11 @@
           {{ props.row.horario_padrao_saida?.slice(0, 5) }}
           <q-popup-edit
             :model-value="props.row.horario_padrao_saida?.slice(0, 5)"
-            buttons
-            label-set="Salvar"
-            label-cancel="Cancelar"
+            buttons label-set="Salvar" label-cancel="Cancelar"
             @save="(val) => salvarCampo(props.row, 'horarioPadrao', val)"
           >
             <template #default="scope">
-              <q-input
-                v-model="scope.value"
-                type="time"
-                label="Horário de saída"
-                dense
-                autofocus
-              />
+              <q-input v-model="scope.value" type="time" label="Horário de saída" dense autofocus />
             </template>
           </q-popup-edit>
         </q-td>
@@ -91,24 +133,14 @@
       <!-- Supervisor -->
       <template #body-cell-supervisor="props">
         <q-td :props="props" class="celula-editavel">
-          <span :class="props.row.supervisor ? '' : 'text-grey-5'">
-            {{ props.row.supervisor || '—' }}
-          </span>
+          <span :class="props.row.supervisor ? '' : 'text-grey-5'">{{ props.row.supervisor || '—' }}</span>
           <q-popup-edit
             :model-value="props.row.supervisor ?? ''"
-            buttons
-            label-set="Salvar"
-            label-cancel="Cancelar"
+            buttons label-set="Salvar" label-cancel="Cancelar"
             @save="(val) => salvarCampo(props.row, 'supervisor', val)"
           >
             <template #default="scope">
-              <q-input
-                v-model="scope.value"
-                label="Supervisor"
-                dense
-                autofocus
-                hint="Nome exato (ex: MIKEIAS)"
-              />
+              <q-input v-model="scope.value" label="Supervisor" dense autofocus hint="Ex: MIKEIAS" />
             </template>
           </q-popup-edit>
         </q-td>
@@ -117,24 +149,14 @@
       <!-- Coordenador -->
       <template #body-cell-coordenador="props">
         <q-td :props="props" class="celula-editavel">
-          <span :class="props.row.coordenador ? '' : 'text-grey-5'">
-            {{ props.row.coordenador || '—' }}
-          </span>
+          <span :class="props.row.coordenador ? '' : 'text-grey-5'">{{ props.row.coordenador || '—' }}</span>
           <q-popup-edit
             :model-value="props.row.coordenador ?? ''"
-            buttons
-            label-set="Salvar"
-            label-cancel="Cancelar"
+            buttons label-set="Salvar" label-cancel="Cancelar"
             @save="(val) => salvarCampo(props.row, 'coordenador', val)"
           >
             <template #default="scope">
-              <q-input
-                v-model="scope.value"
-                label="Coordenador"
-                dense
-                autofocus
-                hint="Nome exato (ex: RICARDO)"
-              />
+              <q-input v-model="scope.value" label="Coordenador" dense autofocus hint="Ex: RICARDO" />
             </template>
           </q-popup-edit>
         </q-td>
@@ -143,10 +165,7 @@
       <!-- Status -->
       <template #body-cell-ativo="props">
         <q-td :props="props">
-          <q-badge
-            :color="props.row.ativo ? 'positive' : 'grey-6'"
-            :label="props.row.ativo ? 'Ativa' : 'Inativa'"
-          />
+          <q-badge :color="props.row.ativo ? 'positive' : 'grey-6'" :label="props.row.ativo ? 'Ativa' : 'Inativa'" />
         </q-td>
       </template>
 
@@ -164,29 +183,22 @@
       </template>
     </q-table>
 
-    <!-- Dica de edição inline -->
     <div class="text-caption text-grey-6 q-mt-sm">
-      <q-icon name="info" size="14px" /> Clique em qualquer célula de Tipo, Horário, Supervisor ou Coordenador para editar diretamente.
+      <q-icon name="info" size="14px" />
+      Clique em qualquer célula de Tipo, Horário, Supervisor ou Coordenador para editar inline.
+      Use os checkboxes para editar várias de uma vez.
     </div>
 
-    <!-- Diálogo completo (nova equipe ou edição avançada) -->
+    <!-- Diálogo completo -->
     <q-dialog v-model="dialogoAberto">
       <q-card style="width: 380px; max-width: 90vw">
         <q-card-section>
           <div class="text-subtitle1">{{ editando ? 'Editar equipe' : 'Nova equipe' }}</div>
         </q-card-section>
         <q-card-section class="q-gutter-md">
-          <q-select
-            v-model="forma.baseId"
-            :options="opcoesBase"
-            emit-value
-            map-options
-            label="Base"
-            filled
-            :disable="!!editando"
-          />
+          <q-select v-model="forma.baseId" :options="opcoesBase" emit-value map-options label="Base" filled :disable="!!editando" />
           <q-select v-model="forma.tipo" :options="tipos" label="Tipo" filled />
-          <q-input v-model="forma.identificador" label="Nome da equipe (ex: MA-BCB-D001M)" filled :disable="!!editando" />
+          <q-input v-model="forma.identificador" label="Nome da equipe" filled :disable="!!editando" />
           <q-input v-model="forma.horarioPadrao" label="Horário de saída padrão" type="time" filled />
           <q-input v-model="forma.supervisor" label="Supervisor" filled />
           <q-input v-model="forma.coordenador" label="Coordenador" filled />
@@ -198,6 +210,49 @@
         </q-card-actions>
       </q-card>
     </q-dialog>
+
+    <!-- Diálogo preview de importação -->
+    <q-dialog v-model="dialogoImport" persistent>
+      <q-card style="width: 640px; max-width: 95vw">
+        <q-card-section class="row items-center">
+          <div class="text-subtitle1">Importar planilha</div>
+          <q-space />
+          <q-badge color="primary" :label="`${linhasImport.length} linha(s) encontrada(s)`" />
+        </q-card-section>
+        <q-card-section class="q-pa-none">
+          <q-table
+            :rows="linhasImport"
+            :columns="colunasImport"
+            row-key="identificador"
+            flat
+            dense
+            :pagination="{ rowsPerPage: 10 }"
+          >
+            <template #body-cell-status="props">
+              <q-td :props="props">
+                <q-badge
+                  :color="props.row.status === 'ok' ? 'positive' : props.row.status === 'novo' ? 'warning' : 'negative'"
+                  :label="props.row.status === 'ok' ? 'Vai atualizar' : props.row.status === 'novo' ? 'Não encontrada' : 'Sem alteração'"
+                />
+              </q-td>
+            </template>
+          </q-table>
+        </q-card-section>
+        <q-card-section class="text-caption text-grey-6">
+          Apenas as linhas marcadas como "Vai atualizar" serão salvas.
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat label="Cancelar" @click="dialogoImport = false" />
+          <q-btn
+            color="primary"
+            :label="`Importar ${linhasImport.filter(l => l.status === 'ok').length} equipe(s)`"
+            :loading="importando"
+            :disable="linhasImport.filter(l => l.status === 'ok').length === 0"
+            @click="confirmarImport"
+          />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
   </q-page>
 </template>
 
@@ -205,6 +260,7 @@
 import { ref, computed, onMounted } from 'vue';
 import { useQuasar } from 'quasar';
 import type { QTableColumn } from 'quasar';
+import ExcelJS from 'exceljs';
 import { api } from '@/boot/axios';
 
 interface Equipe {
@@ -223,6 +279,14 @@ interface Base {
   nome: string;
 }
 
+interface LinhaImport {
+  identificador: string;
+  supervisor: string;
+  coordenador: string;
+  status: 'ok' | 'novo' | 'sem_alteracao';
+  equipeId: number | undefined;
+}
+
 const tipos = ['GERE', 'GOMAN', 'GSTC'];
 const $q = useQuasar();
 
@@ -234,6 +298,15 @@ const carregando = ref(false);
 const dialogoAberto = ref(false);
 const editando = ref<Equipe | null>(null);
 const salvando = ref(false);
+const selecionadas = ref<Equipe[]>([]);
+const loteSupervisor = ref('');
+const loteCoordenador = ref('');
+const aplicando = ref(false);
+const inputExcel = ref<HTMLInputElement | null>(null);
+const dialogoImport = ref(false);
+const linhasImport = ref<LinhaImport[]>([]);
+const importando = ref(false);
+
 const forma = ref({
   baseId: null as number | null,
   tipo: 'GERE',
@@ -271,12 +344,18 @@ const colunas: QTableColumn[] = [
     label: 'Horário',
     field: (row: Equipe) => row.horario_padrao_saida?.slice(0, 5),
     align: 'left',
-    sortable: true,
   },
   { name: 'supervisor', label: 'Supervisor', field: 'supervisor', align: 'left', sortable: true },
   { name: 'coordenador', label: 'Coordenador', field: 'coordenador', align: 'left', sortable: true },
   { name: 'ativo', label: 'Status', field: 'ativo', align: 'left' },
   { name: 'acoes', label: '', field: 'id', align: 'right' },
+];
+
+const colunasImport: QTableColumn[] = [
+  { name: 'identificador', label: 'Equipe', field: 'identificador', align: 'left' },
+  { name: 'supervisor', label: 'Supervisor', field: 'supervisor', align: 'left' },
+  { name: 'coordenador', label: 'Coordenador', field: 'coordenador', align: 'left' },
+  { name: 'status', label: 'Resultado', field: 'status', align: 'left' },
 ];
 
 async function carregarBases() {
@@ -298,7 +377,7 @@ async function carregar() {
 
 async function salvarCampo(equipe: Equipe, campo: string, valor: string) {
   try {
-    const payload: Record<string, string | boolean | null> = {
+    const payload: Record<string, unknown> = {
       tipo: equipe.tipo,
       identificador: equipe.identificador,
       horarioPadrao: equipe.horario_padrao_saida.slice(0, 5),
@@ -308,7 +387,6 @@ async function salvarCampo(equipe: Equipe, campo: string, valor: string) {
       [campo]: valor || null,
     };
     await api.put(`/equipes/${equipe.id}`, payload);
-    // Atualiza localmente sem recarregar tudo
     const idx = equipes.value.findIndex((e) => e.id === equipe.id);
     if (idx !== -1) {
       const atualizado: Equipe = { ...equipes.value[idx]! };
@@ -319,23 +397,181 @@ async function salvarCampo(equipe: Equipe, campo: string, valor: string) {
       }
       equipes.value[idx] = atualizado;
     }
-    $q.notify({ type: 'positive', message: 'Salvo!', timeout: 1200 });
+    $q.notify({ type: 'positive', message: 'Salvo!', timeout: 1000 });
   } catch {
-    $q.notify({ type: 'negative', message: 'Erro ao salvar. Tente novamente.' });
+    $q.notify({ type: 'negative', message: 'Erro ao salvar.' });
+  }
+}
+
+async function aplicarLote() {
+  if (!loteSupervisor.value && !loteCoordenador.value) return;
+  aplicando.value = true;
+  try {
+    await Promise.all(
+      selecionadas.value.map((eq) =>
+        api.put(`/equipes/${eq.id}`, {
+          tipo: eq.tipo,
+          identificador: eq.identificador,
+          horarioPadrao: eq.horario_padrao_saida.slice(0, 5),
+          supervisor: loteSupervisor.value || eq.supervisor,
+          coordenador: loteCoordenador.value || eq.coordenador,
+          ativo: eq.ativo,
+        }),
+      ),
+    );
+    $q.notify({
+      type: 'positive',
+      message: `${selecionadas.value.length} equipe(s) atualizadas!`,
+    });
+    selecionadas.value = [];
+    loteSupervisor.value = '';
+    loteCoordenador.value = '';
+    await carregar();
+  } catch {
+    $q.notify({ type: 'negative', message: 'Erro ao aplicar em lote.' });
+  } finally {
+    aplicando.value = false;
+  }
+}
+
+// ---- Excel: baixar template ----
+async function baixarTemplate() {
+  const wb = new ExcelJS.Workbook();
+  const ws = wb.addWorksheet('Equipes');
+
+  ws.columns = [
+    { header: 'Identificador', key: 'id', width: 22 },
+    { header: 'Base', key: 'base', width: 18 },
+    { header: 'Tipo', key: 'tipo', width: 10 },
+    { header: 'Supervisor', key: 'supervisor', width: 20 },
+    { header: 'Coordenador', key: 'coordenador', width: 20 },
+  ];
+
+  // Cabeçalho
+  const header = ws.getRow(1);
+  header.font = { bold: true, color: { argb: 'FFFFFFFF' } };
+  header.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F2937' } };
+  header.alignment = { vertical: 'middle', horizontal: 'center' };
+  header.height = 22;
+
+  // Dados atuais
+  for (const eq of equipes.value) {
+    const base = opcoesBase.value.find((b) => b.value === eq.base_id)?.label ?? '';
+    ws.addRow({
+      id: eq.identificador,
+      base,
+      tipo: eq.tipo,
+      supervisor: eq.supervisor ?? '',
+      coordenador: eq.coordenador ?? '',
+    });
+  }
+
+  // Nota
+  ws.addRow([]);
+  ws.addRow(['Instruções:', 'Edite as colunas Supervisor e Coordenador. Não altere o Identificador.']);
+  ws.getRow(ws.rowCount).font = { italic: true, color: { argb: 'FF6B7280' } };
+
+  const buffer = await wb.xlsx.writeBuffer();
+  const blob = new Blob([buffer], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = 'equipes-template.xlsx';
+  a.click();
+  URL.revokeObjectURL(url);
+}
+
+// ---- Excel: importar ----
+async function onExcelSelecionado(event: Event) {
+  const file = (event.target as HTMLInputElement).files?.[0];
+  if (!file) return;
+  if (inputExcel.value) inputExcel.value.value = '';
+
+  try {
+    const buffer = await file.arrayBuffer();
+    const wb = new ExcelJS.Workbook();
+    await wb.xlsx.load(buffer);
+    const ws = wb.worksheets[0];
+    if (!ws) {
+      $q.notify({ type: 'negative', message: 'Planilha vazia ou inválida.' });
+      return;
+    }
+
+    // Detecta colunas pelo cabeçalho (linha 1)
+    const headerRow = ws.getRow(1);
+    const colIdx: Record<string, number> = {};
+    headerRow.eachCell((cell, col) => {
+      const v = String(cell.value ?? '').trim().toLowerCase();
+      if (v === 'identificador') colIdx['identificador'] = col;
+      if (v === 'supervisor') colIdx['supervisor'] = col;
+      if (v === 'coordenador') colIdx['coordenador'] = col;
+    });
+
+    if (!colIdx['identificador']) {
+      $q.notify({ type: 'negative', message: 'Coluna "Identificador" não encontrada na planilha.' });
+      return;
+    }
+
+    const mapa = new Map(equipes.value.map((e) => [e.identificador.toUpperCase(), e]));
+    const linhas: LinhaImport[] = [];
+
+    ws.eachRow((row, idx) => {
+      if (idx === 1) return;
+      const ident = String(row.getCell(colIdx['identificador']!).value ?? '').trim();
+      if (!ident) return;
+      const supervisor = String(row.getCell(colIdx['supervisor'] ?? 0).value ?? '').trim();
+      const coordenador = String(row.getCell(colIdx['coordenador'] ?? 0).value ?? '').trim();
+      const equipe = mapa.get(ident.toUpperCase());
+
+      let status: LinhaImport['status'];
+      if (!equipe) {
+        status = 'novo';
+      } else if (supervisor === (equipe.supervisor ?? '') && coordenador === (equipe.coordenador ?? '')) {
+        status = 'sem_alteracao';
+      } else {
+        status = 'ok';
+      }
+
+      linhas.push({ identificador: ident, supervisor, coordenador, status, equipeId: equipe?.id });
+    });
+
+    linhasImport.value = linhas;
+    dialogoImport.value = true;
+  } catch {
+    $q.notify({ type: 'negative', message: 'Erro ao ler o arquivo. Certifique-se de que é um .xlsx válido.' });
+  }
+}
+
+async function confirmarImport() {
+  const paraAtualizar = linhasImport.value.filter((l) => l.status === 'ok');
+  importando.value = true;
+  try {
+    await Promise.all(
+      paraAtualizar.map((linha) => {
+        const eq = equipes.value.find((e) => e.id === linha.equipeId)!;
+        return api.put(`/equipes/${linha.equipeId}`, {
+          tipo: eq.tipo,
+          identificador: eq.identificador,
+          horarioPadrao: eq.horario_padrao_saida.slice(0, 5),
+          supervisor: linha.supervisor || null,
+          coordenador: linha.coordenador || null,
+          ativo: eq.ativo,
+        });
+      }),
+    );
+    $q.notify({ type: 'positive', message: `${paraAtualizar.length} equipe(s) importadas com sucesso!` });
+    dialogoImport.value = false;
+    await carregar();
+  } catch {
+    $q.notify({ type: 'negative', message: 'Erro durante a importação.' });
+  } finally {
+    importando.value = false;
   }
 }
 
 function abrirNovo() {
   editando.value = null;
-  forma.value = {
-    baseId: filtroBaseId.value,
-    tipo: 'GERE',
-    identificador: '',
-    horarioPadrao: '08:30',
-    supervisor: '',
-    coordenador: '',
-    ativo: true,
-  };
+  forma.value = { baseId: filtroBaseId.value, tipo: 'GERE', identificador: '', horarioPadrao: '08:30', supervisor: '', coordenador: '', ativo: true };
   dialogoAberto.value = true;
 }
 
@@ -391,18 +627,23 @@ onMounted(async () => {
 <style scoped>
 .celula-editavel {
   cursor: pointer;
-  position: relative;
 }
-
 .celula-editavel:hover::after {
-  content: '✏';
+  content: ' ✏';
   font-size: 10px;
-  margin-left: 4px;
-  opacity: 0.5;
+  opacity: 0.45;
 }
-
 :deep(.equipes-table .q-table tbody td) {
-  padding-top: 6px;
-  padding-bottom: 6px;
+  padding-top: 5px;
+  padding-bottom: 5px;
+}
+.slide-down-enter-active,
+.slide-down-leave-active {
+  transition: all 0.2s ease;
+}
+.slide-down-enter-from,
+.slide-down-leave-to {
+  opacity: 0;
+  transform: translateY(-8px);
 }
 </style>
