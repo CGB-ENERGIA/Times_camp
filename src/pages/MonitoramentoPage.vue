@@ -11,38 +11,29 @@
       <!-- Chips de status: dobram como legenda (ícone + texto, nunca só cor) e como filtro -->
       <div class="row q-gutter-sm q-mb-sm">
         <q-chip
-          clickable
-          square
+          clickable square
           :outline="!statusFiltro.includes('pendente')"
-          text-color="white"
-          :style="{ background: CORES.pendente }"
+          color="grey-7"
+          :text-color="statusFiltro.includes('pendente') ? 'white' : 'grey-7'"
           icon="schedule"
           @click="alternarStatus('pendente')"
-        >
-          {{ statsAnim.pendente }} pendente(s)
-        </q-chip>
+        >{{ statsAnim.pendente }} pendente(s)</q-chip>
         <q-chip
-          clickable
-          square
+          clickable square
           :outline="!statusFiltro.includes('no_prazo')"
-          text-color="white"
-          :style="{ background: CORES.no_prazo }"
+          color="positive"
+          :text-color="statusFiltro.includes('no_prazo') ? 'white' : 'positive'"
           icon="check_circle"
           @click="alternarStatus('no_prazo')"
-        >
-          {{ statsAnim.no_prazo }} no prazo
-        </q-chip>
+        >{{ statsAnim.no_prazo }} no prazo</q-chip>
         <q-chip
-          clickable
-          square
+          clickable square
           :outline="!statusFiltro.includes('atrasado')"
-          text-color="white"
-          :style="{ background: CORES.atrasado }"
+          color="negative"
+          :text-color="statusFiltro.includes('atrasado') ? 'white' : 'negative'"
           icon="warning"
           @click="alternarStatus('atrasado')"
-        >
-          {{ statsAnim.atrasado }} atrasada(s)
-        </q-chip>
+        >{{ statsAnim.atrasado }} atrasada(s)</q-chip>
 
         <q-space />
 

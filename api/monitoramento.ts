@@ -27,11 +27,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     select
       b.id as base_id, b.nome as base_nome,
       e.id as equipe_id, e.tipo, e.identificador, e.horario_padrao_saida, e.supervisor, e.coordenador,
-      s.hora_saida, s.observacao, u.nome as registrado_por_nome
+      s.hora_saida, s.observacao, u.nome as registrado_por_nome,
+      j.id as justificativa_id, j.motivo as justificativa
     from bases b
     join equipes e on e.base_id = b.id and e.ativo = true
     left join saidas s on s.equipe_id = e.id and s.data = ${data}
     left join usuarios u on u.id = s.registrado_por
+    left join justificativas j on j.equipe_id = e.id and j.data = ${data}
     where b.ativo = true
     order by b.nome, e.tipo, e.identificador
   `;
@@ -51,6 +53,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         horaSaida: string | null;
         observacao: string | null;
         registradoPor: string | null;
+        justificativaId: number | null;
+        justificativa: string | null;
         status: 'no_prazo' | 'atrasado' | 'pendente';
       }>;
     }
@@ -81,6 +85,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       horaSaida: linha.hora_saida,
       observacao: linha.observacao,
       registradoPor: linha.registrado_por_nome,
+      justificativaId: linha.justificativa_id ?? null,
+      justificativa: linha.justificativa ?? null,
       status,
     });
   }
