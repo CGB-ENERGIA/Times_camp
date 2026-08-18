@@ -75,8 +75,6 @@
           v-model="tipoFiltro"
           :options="tipos"
           multiple
-          emit-value
-          map-options
           dense
           filled
           clearable
@@ -88,8 +86,6 @@
           v-model="supervisorFiltro"
           :options="opcoesSupervisor"
           multiple
-          emit-value
-          map-options
           dense
           filled
           clearable
@@ -101,8 +97,6 @@
           v-model="coordenadorFiltro"
           :options="opcoesCoordenador"
           multiple
-          emit-value
-          map-options
           dense
           filled
           clearable
