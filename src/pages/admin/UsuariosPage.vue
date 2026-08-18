@@ -1,12 +1,23 @@
 <template>
   <q-page class="q-pa-md">
-    <div class="row items-center q-mb-md">
+    <div class="row items-center q-gutter-sm q-mb-md">
       <div class="text-h6">Usuários</div>
       <q-space />
+      <q-input
+        v-model="busca"
+        dense
+        filled
+        clearable
+        debounce="150"
+        placeholder="Buscar usuário..."
+        style="min-width: 240px"
+      >
+        <template #prepend><q-icon name="search" /></template>
+      </q-input>
       <q-btn color="primary" icon="add" label="Novo usuário" unelevated @click="abrirNovo" />
     </div>
 
-    <q-table :rows="usuarios" :columns="colunas" row-key="id" :loading="carregando" flat bordered>
+    <q-table :rows="usuariosFiltrados" :columns="colunas" row-key="id" :loading="carregando" flat bordered>
       <template #body-cell-role="props">
         <q-td :props="props">
           <q-badge :color="corPerfil(props.row.role)" :label="rotuloPerfil(props.row.role)" />
@@ -81,7 +92,7 @@
 </template>
 
 <script setup lang="ts">
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import type { QTableColumn } from 'quasar';
 import { useQuasar } from 'quasar';
 import axios from 'axios';
@@ -108,6 +119,20 @@ interface Equipe {
 const $q = useQuasar();
 
 const usuarios = ref<Usuario[]>([]);
+const busca = ref('');
+
+const usuariosFiltrados = computed(() => {
+  const q = busca.value.toLowerCase().trim();
+  if (!q) return usuarios.value;
+  return usuarios.value.filter(
+    (u) =>
+      u.nome.toLowerCase().includes(q) ||
+      u.usuario.toLowerCase().includes(q) ||
+      (u.supervisor ?? '').toLowerCase().includes(q) ||
+      (u.coordenador ?? '').toLowerCase().includes(q) ||
+      u.role.toLowerCase().includes(q),
+  );
+});
 const opcoesSupervisor = ref<string[]>([]);
 const opcoesCoordenador = ref<string[]>([]);
 const carregando = ref(false);
