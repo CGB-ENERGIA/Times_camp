@@ -50,6 +50,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
+    if (session.role === 'visualizador') {
+      res.status(403).json({ error: 'Visualizadores não podem registrar saídas' });
+      return;
+    }
+
     if (session.role === 'tecnico' && (!session.supervisor || equipe.supervisor !== session.supervisor)) {
       res.status(403).json({ error: 'Você só pode registrar saídas de equipes do seu supervisor' });
       return;

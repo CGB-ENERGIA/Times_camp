@@ -1,7 +1,7 @@
 import { defineStore } from 'pinia';
 import { api } from '@/boot/axios';
 
-export type Role = 'admin' | 'tecnico' | 'coordenador';
+export type Role = 'admin' | 'tecnico' | 'coordenador' | 'visualizador';
 
 export interface Usuario {
   id: number;
@@ -24,6 +24,7 @@ export const useAuthStore = defineStore('auth', {
     isAdmin: (state) => state.user?.role === 'admin',
     isTecnico: (state) => state.user?.role === 'tecnico',
     isCoordenador: (state) => state.user?.role === 'coordenador',
+    isVisualizador: (state) => state.user?.role === 'visualizador',
   },
 
   actions: {

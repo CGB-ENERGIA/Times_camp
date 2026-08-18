@@ -45,7 +45,7 @@
           <q-input v-model="forma.usuario" label="Usuário (login)" filled :disable="!!editando" />
           <q-select
             v-model="forma.role"
-            :options="['admin', 'tecnico', 'coordenador']"
+            :options="['admin', 'tecnico', 'coordenador', 'visualizador']"
             label="Perfil"
             filled
           />
@@ -97,7 +97,7 @@ import { useQuasar } from 'quasar';
 import axios from 'axios';
 import { api } from '@/boot/axios';
 
-type Role = 'admin' | 'tecnico' | 'coordenador';
+type Role = 'admin' | 'tecnico' | 'coordenador' | 'visualizador';
 
 interface Usuario {
   id: number;
@@ -159,8 +159,8 @@ const colunas: QTableColumn[] = [
   { name: 'acoes', label: '', field: 'id', align: 'right' },
 ];
 
-const ROTULOS_PERFIL: Record<Role, string> = { admin: 'Admin', tecnico: 'Técnico', coordenador: 'Coordenador' };
-const CORES_PERFIL: Record<Role, string> = { admin: 'purple', tecnico: 'primary', coordenador: 'teal' };
+const ROTULOS_PERFIL: Record<Role, string> = { admin: 'Admin', tecnico: 'Técnico', coordenador: 'Coordenador', visualizador: 'Visualizador' };
+const CORES_PERFIL: Record<Role, string> = { admin: 'purple', tecnico: 'primary', coordenador: 'teal', visualizador: 'orange' };
 
 function rotuloPerfil(role: Role) {
   return ROTULOS_PERFIL[role];

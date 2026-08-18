@@ -105,7 +105,7 @@ const router = useRouter();
 const $q = useQuasar();
 
 const rotuloPerfil = computed(() => {
-  const rotulos: Record<string, string> = { admin: 'Admin', tecnico: 'Técnico', coordenador: 'Coordenador' };
+  const rotulos: Record<string, string> = { admin: 'Admin', tecnico: 'Técnico', coordenador: 'Coordenador', visualizador: 'Visualizador' };
   return rotulos[authStore.user?.role ?? ''] ?? '';
 });
 

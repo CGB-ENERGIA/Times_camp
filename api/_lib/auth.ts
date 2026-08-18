@@ -9,7 +9,7 @@ if (!process.env.JWT_SECRET) {
 }
 const JWT_SECRET: string = process.env.JWT_SECRET;
 
-export type Role = 'admin' | 'tecnico' | 'coordenador';
+export type Role = 'admin' | 'tecnico' | 'coordenador' | 'visualizador';
 
 export interface SessionPayload {
   usuarioId: number;

@@ -16,7 +16,7 @@ const routes: RouteRecordRaw[] = [
       {
         path: 'apontamento',
         component: () => import('@/pages/ApontamentoPage.vue'),
-        meta: { roles: ['tecnico', 'admin', 'coordenador'] },
+        meta: { roles: ['tecnico', 'admin', 'coordenador'] }, // visualizador excluído
       },
       { path: 'historico', component: () => import('@/pages/HistoricoPage.vue') },
       {
