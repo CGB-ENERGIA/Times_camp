@@ -14,7 +14,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const rows = await sql`
-      select j.id, j.equipe_id, j.data, j.motivo, u.nome as registrado_por_nome, j.updated_at
+      select j.id, j.equipe_id, j.data, j.tipo, j.motivo, u.nome as registrado_por_nome, j.updated_at
       from justificativas j
       join usuarios u on u.id = j.registrado_por
       where j.data = ${data}
@@ -33,9 +33,13 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    const { equipeId, data, motivo } = req.body || {};
-    if (!equipeId || !data || !motivo?.trim()) {
-      res.status(400).json({ error: 'Informe equipe, data e motivo' });
+    const { equipeId, data, tipo, motivo } = req.body || {};
+    if (!equipeId || !data || !tipo || !motivo?.trim()) {
+      res.status(400).json({ error: 'Informe equipe, data, tipo e motivo' });
+      return;
+    }
+    if (!['FALTA', 'ATRASO'].includes(tipo)) {
+      res.status(400).json({ error: 'Tipo deve ser FALTA ou ATRASO' });
       return;
     }
 
@@ -57,14 +61,15 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
 
     const [registro] = await sql`
-      insert into justificativas (equipe_id, data, motivo, registrado_por)
-      values (${equipeId}, ${data}, ${motivo.trim()}, ${session.usuarioId})
+      insert into justificativas (equipe_id, data, tipo, motivo, registrado_por)
+      values (${equipeId}, ${data}, ${tipo}, ${motivo.trim()}, ${session.usuarioId})
       on conflict (equipe_id, data)
       do update set
+        tipo = excluded.tipo,
         motivo = excluded.motivo,
         registrado_por = excluded.registrado_por,
         updated_at = now()
-      returning id, equipe_id, data, motivo
+      returning id, equipe_id, data, tipo, motivo
     `;
     res.status(200).json(registro);
     return;

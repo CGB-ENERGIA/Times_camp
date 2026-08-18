@@ -93,7 +93,9 @@
               <span class="text-grey-6"> · limite {{ props.row.horarioPadrao.slice(0, 5) }}</span>
               <div v-if="props.row.observacao" class="text-caption text-grey-6">{{ props.row.observacao }}</div>
               <div v-if="justificativas.get(props.row.equipeId)" class="text-caption text-orange">
-                <q-icon name="info" size="12px" /> {{ justificativas.get(props.row.equipeId) }}
+                <q-icon name="comment" size="12px" />
+                <strong>{{ justificativas.get(props.row.equipeId)?.tipo }}</strong>
+                — {{ justificativas.get(props.row.equipeId)?.motivo }}
               </div>
             </q-td>
             <q-td key="status" :props="props">
@@ -153,7 +155,7 @@
 
     <!-- Diálogo de justificativa -->
     <q-dialog v-model="dialogoJustAberto">
-      <q-card style="width: 400px; max-width: 90vw">
+      <q-card style="width: 420px; max-width: 90vw">
         <q-card-section>
           <div class="text-subtitle1">
             <q-icon name="comment" color="orange" class="q-mr-xs" />
@@ -161,15 +163,23 @@
           </div>
           <div class="text-caption text-grey-7">{{ equipeJust?.tipo }} · {{ equipeJust?.identificador }}</div>
         </q-card-section>
-        <q-card-section>
+        <q-card-section class="q-gutter-md">
+          <q-select
+            v-model="tipoJust"
+            :options="[{ label: 'Falta — equipe não saiu', value: 'FALTA' }, { label: 'Atraso — equipe saiu depois do limite', value: 'ATRASO' }]"
+            emit-value
+            map-options
+            label="Tipo de ocorrência"
+            filled
+          />
           <q-input
             v-model="motivoJust"
-            label="Motivo da falta / atraso"
+            label="Descrição do motivo"
             type="textarea"
             filled
             autogrow
             :rows="3"
-            hint="Ex: Chuva intensa, veículo em manutenção, acidente na via..."
+            placeholder="Ex: Chuva intensa, veículo em manutenção, acidente na via..."
           />
         </q-card-section>
         <q-card-actions align="right">
@@ -178,7 +188,7 @@
             color="orange"
             label="Salvar justificativa"
             :loading="salvandoJust"
-            :disable="!motivoJust.trim()"
+            :disable="!tipoJust || !motivoJust.trim()"
             @click="salvarJustificativa"
           />
         </q-card-actions>
@@ -224,6 +234,7 @@ interface MonitoramentoResponse {
 interface Justificativa {
   id: number;
   equipe_id: number;
+  tipo: string;
   motivo: string;
 }
 
@@ -240,8 +251,8 @@ const tipoFiltro = ref<string[]>([]);
 const statusFiltro = ref<Status[]>([]);
 const conteudoEl = ref<HTMLElement | null>(null);
 
-// Justificativas: mapa equipeId → motivo
-const justificativas = ref<Map<number, string>>(new Map());
+// Justificativas: mapa equipeId → { tipo, motivo }
+const justificativas = ref<Map<number, { tipo: string; motivo: string }>>(new Map());
 
 const opcoesBase = computed(() =>
   (resposta.value?.bases ?? []).map((b) => ({ label: b.baseNome, value: b.baseId })),
@@ -331,6 +342,7 @@ const salvando = ref(false);
 // Diálogo de justificativa
 const dialogoJustAberto = ref(false);
 const equipeJust = ref<EquipeStatus | null>(null);
+const tipoJust = ref<'FALTA' | 'ATRASO' | null>(null);
 const motivoJust = ref('');
 const salvandoJust = ref(false);
 
@@ -357,8 +369,8 @@ function limparFiltros() {
 async function carregarJustificativas() {
   try {
     const { data } = await api.get<Justificativa[]>('/justificativas', { params: { data: dataHoje } });
-    const mapa = new Map<number, string>();
-    for (const j of data) mapa.set(j.equipe_id, j.motivo);
+    const mapa = new Map<number, { tipo: string; motivo: string }>();
+    for (const j of data) mapa.set(j.equipe_id, { tipo: j.tipo, motivo: j.motivo });
     justificativas.value = mapa;
   } catch {
     // silencioso — não bloqueia a página
@@ -416,20 +428,23 @@ async function salvar() {
 
 function abrirJustificativa(equipe: EquipeStatus) {
   equipeJust.value = equipe;
-  motivoJust.value = justificativas.value.get(equipe.equipeId) ?? '';
+  const existente = justificativas.value.get(equipe.equipeId);
+  tipoJust.value = (existente?.tipo ?? null) as 'FALTA' | 'ATRASO' | null;
+  motivoJust.value = existente?.motivo ?? '';
   dialogoJustAberto.value = true;
 }
 
 async function salvarJustificativa() {
-  if (!equipeJust.value || !motivoJust.value.trim()) return;
+  if (!equipeJust.value || !tipoJust.value || !motivoJust.value.trim()) return;
   salvandoJust.value = true;
   try {
     await api.post('/justificativas', {
       equipeId: equipeJust.value.equipeId,
       data: dataHoje,
+      tipo: tipoJust.value,
       motivo: motivoJust.value.trim(),
     });
-    justificativas.value.set(equipeJust.value.equipeId, motivoJust.value.trim());
+    justificativas.value.set(equipeJust.value.equipeId, { tipo: tipoJust.value, motivo: motivoJust.value.trim() });
     dialogoJustAberto.value = false;
   } finally {
     salvandoJust.value = false;
