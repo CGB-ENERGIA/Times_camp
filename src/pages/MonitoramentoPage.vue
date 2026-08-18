@@ -213,6 +213,56 @@
         </q-card-section>
       </q-card>
 
+      <!-- Gráfico: média de saída por base -->
+      <q-card flat bordered class="q-mb-md">
+        <q-card-section class="row items-center q-gutter-sm">
+          <div class="text-subtitle2">Média de saída por base</div>
+          <div class="text-caption text-grey-6">{{ data }} · apenas equipes com saída registrada</div>
+        </q-card-section>
+        <q-separator />
+        <q-card-section>
+          <Bar
+            v-if="rowsFiltradas.some(r => r.horaSaida)"
+            :data="dadosGraficoMedia"
+            :options="opcoesGraficoMedia"
+            style="height: 280px"
+          />
+          <div v-else class="text-grey-6 text-center q-pa-lg">Nenhuma saída registrada ainda com esses filtros.</div>
+        </q-card-section>
+      </q-card>
+
+      <!-- Gráfico: detalhe de equipes por base -->
+      <q-card flat bordered class="q-mb-md">
+        <q-card-section class="row items-center q-gutter-sm">
+          <div class="text-subtitle2">Equipes por base — detalhe</div>
+          <div class="text-caption text-grey-6">{{ data }}</div>
+        </q-card-section>
+        <q-separator />
+        <q-card-section>
+          <div v-for="base in equipesPorBase" :key="base.baseNome" class="q-mb-md">
+            <div class="row items-center q-gutter-xs q-mb-xs">
+              <span class="text-subtitle2">{{ base.baseNome }}</span>
+              <q-badge color="positive" :label="`${base.stats.no_prazo} no prazo`" />
+              <q-badge v-if="base.stats.atrasado > 0" color="negative" :label="`${base.stats.atrasado} atrasada(s)`" />
+              <q-badge v-if="base.stats.pendente > 0" color="grey-6" :label="`${base.stats.pendente} pendente(s)`" />
+            </div>
+            <div class="row q-gutter-xs">
+              <div
+                v-for="eq in base.equipes"
+                :key="eq.equipeId"
+                class="equipe-chip"
+                :style="{ borderColor: CORES[eq.status], background: `${CORES[eq.status]}22` }"
+                :title="`${eq.identificador} · ${eq.horaSaida ? eq.horaSaida.slice(0,5) : 'Pendente'}${eq.atrasoMin ? ` · +${eq.atrasoMin}min` : ''}`"
+              >
+                <span class="equipe-chip-id" :style="{ color: CORES[eq.status] }">{{ eq.identificador }}</span>
+                <span v-if="eq.horaSaida" class="equipe-chip-time">{{ eq.horaSaida.slice(0, 5) }}</span>
+                <span v-if="eq.atrasoMin" class="equipe-chip-atraso">+{{ eq.atrasoMin }}m</span>
+              </div>
+            </div>
+          </div>
+        </q-card-section>
+      </q-card>
+
       <q-table
         :rows="rowsFiltradas"
         :columns="colunas"
@@ -540,6 +590,97 @@ const opcoesGraficoAtraso = computed<ChartOptions<'bar'>>(() => {
   };
 });
 
+// ----- Gráfico A: média de saída por base -----
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const dadosGraficoMedia = computed<any>(() => {
+  const bases = [...new Set(rowsFiltradas.value.map((r) => r.baseNome))].sort();
+  return {
+    labels: bases,
+    datasets: [
+      {
+        label: 'Média de saída',
+        data: bases.map((b) => {
+          const saidas = rowsFiltradas.value.filter((r) => r.baseNome === b && r.horaSaida);
+          if (!saidas.length) return null;
+          return Math.round(saidas.reduce((acc, r) => acc + toMinutos(r.horaSaida!), 0) / saidas.length);
+        }),
+        backgroundColor: bases.map((b) => {
+          const saidas = rowsFiltradas.value.filter((r) => r.baseNome === b && r.horaSaida);
+          if (!saidas.length) return CORES.pendente;
+          const media = saidas.reduce((acc, r) => acc + toMinutos(r.horaSaida!), 0) / saidas.length;
+          return media <= 510 ? CORES.no_prazo : CORES.atrasado;
+        }),
+        borderRadius: 4,
+        order: 1,
+      },
+      {
+        type: 'line',
+        label: 'Limite 08:30',
+        data: Array(bases.length).fill(510),
+        borderColor: '#f59e0b',
+        borderWidth: 2,
+        borderDash: [6, 4],
+        pointRadius: 0,
+        fill: false,
+        order: 0,
+      },
+    ],
+  };
+});
+
+const opcoesGraficoMedia = computed<ChartOptions<'bar'>>(() => {
+  const corTexto = $q.dark.isActive ? '#e0e0e0' : '#333';
+  const corGrade = $q.dark.isActive ? 'rgba(255,255,255,0.08)' : 'rgba(0,0,0,0.08)';
+  return {
+    responsive: true,
+    maintainAspectRatio: false,
+    scales: {
+      x: { ticks: { color: corTexto }, grid: { display: false } },
+      y: {
+        min: 6 * 60,
+        ticks: {
+          color: corTexto,
+          stepSize: 30,
+          callback: (val) => formatarMinutos(val as number),
+        },
+        grid: { color: corGrade },
+      },
+    },
+    plugins: {
+      legend: { position: 'bottom', labels: { color: corTexto, usePointStyle: true } },
+      tooltip: {
+        callbacks: {
+          label: (ctx) => {
+            if ((ctx.dataset as { type?: string }).type === 'line') return 'Limite: 08:30';
+            const val = ctx.raw as number | null;
+            return val !== null ? `Média: ${formatarMinutos(val)}` : 'Sem saídas';
+          },
+        },
+      },
+    },
+  };
+});
+
+// ----- Gráfico B: detalhe de equipes por base -----
+const equipesPorBase = computed(() => {
+  const bases = [...new Set(rowsFiltradas.value.map((r) => r.baseNome))].sort();
+  return bases.map((baseNome) => ({
+    baseNome,
+    equipes: rowsFiltradas.value
+      .filter((r) => r.baseNome === baseNome)
+      .sort((a, b) => {
+        const order: Record<Status, number> = { no_prazo: 0, atrasado: 1, pendente: 2 };
+        if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
+        return a.identificador.localeCompare(b.identificador);
+      }),
+    stats: {
+      no_prazo: rowsFiltradas.value.filter((r) => r.baseNome === baseNome && r.status === 'no_prazo').length,
+      atrasado: rowsFiltradas.value.filter((r) => r.baseNome === baseNome && r.status === 'atrasado').length,
+      pendente: rowsFiltradas.value.filter((r) => r.baseNome === baseNome && r.status === 'pendente').length,
+    },
+  }));
+});
+
 // ----- Gráfico 3: heatmap de horário de saída por base -----
 const TAMANHO_BUCKET = 15; // minutos
 const LIMITE_PADRAO_MIN = 8 * 60 + 30; // 08:30, referência visual (a maioria das equipes usa esse limite)
@@ -728,6 +869,32 @@ onUnmounted(() => {
   height: 10px;
   border-radius: 4px;
   background: linear-gradient(90deg, rgba(25, 118, 210, 0.1), rgba(25, 118, 210, 0.9));
+}
+
+.equipe-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 3px 8px;
+  border-radius: 6px;
+  border: 1.5px solid;
+  font-size: 0.75rem;
+  white-space: nowrap;
+}
+
+.equipe-chip-id {
+  font-weight: 600;
+}
+
+.equipe-chip-time {
+  color: var(--q-grey-6, #757575);
+  font-size: 0.72rem;
+}
+
+.equipe-chip-atraso {
+  color: #d03b3b;
+  font-size: 0.7rem;
+  font-weight: 600;
 }
 
 .heatmap-limite-swatch {
