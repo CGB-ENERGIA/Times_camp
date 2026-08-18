@@ -179,7 +179,6 @@
             filled
             autogrow
             :rows="3"
-            placeholder="Ex: Chuva intensa, veículo em manutenção, acidente na via..."
           />
         </q-card-section>
         <q-card-actions align="right">
