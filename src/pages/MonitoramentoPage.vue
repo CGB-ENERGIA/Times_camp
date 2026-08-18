@@ -75,33 +75,36 @@
           v-model="tipoFiltro"
           :options="tipos"
           multiple
+          use-chips
           dense
           filled
-          clearable
           label="Tipo"
           style="min-width: 140px"
+          @update:model-value="(v) => (tipoFiltro = v ?? [])"
         />
 
         <q-select
           v-model="supervisorFiltro"
           :options="opcoesSupervisor"
           multiple
+          use-chips
           dense
           filled
-          clearable
           label="Supervisor"
           style="min-width: 160px"
+          @update:model-value="(v) => (supervisorFiltro = v ?? [])"
         />
 
         <q-select
           v-model="coordenadorFiltro"
           :options="opcoesCoordenador"
           multiple
+          use-chips
           dense
           filled
-          clearable
           label="Coordenador"
           style="min-width: 160px"
+          @update:model-value="(v) => (coordenadorFiltro = v ?? [])"
         />
 
         <q-btn v-if="temFiltroAtivo" flat dense label="Limpar filtros" @click="limparFiltros" />
@@ -414,12 +417,12 @@ const todasLinhas = computed<Row[]>(() => {
 
 const rowsFiltradas = computed(() =>
   todasLinhas.value.filter((r) => {
-    const bateBase = baseFiltro.value.length === 0 || baseFiltro.value.includes(r.baseId);
-    const bateTipo = tipoFiltro.value.length === 0 || tipoFiltro.value.includes(r.tipo);
-    const bateSupervisor = supervisorFiltro.value.length === 0 || (!!r.supervisor && supervisorFiltro.value.includes(r.supervisor));
-    const bateCoordenador = coordenadorFiltro.value.length === 0 || (!!r.coordenador && coordenadorFiltro.value.includes(r.coordenador));
+    const bateBase = (baseFiltro.value?.length ?? 0) === 0 || baseFiltro.value.includes(r.baseId);
+    const bateTipo = (tipoFiltro.value?.length ?? 0) === 0 || tipoFiltro.value.includes(r.tipo);
+    const bateSupervisor = (supervisorFiltro.value?.length ?? 0) === 0 || (!!r.supervisor && supervisorFiltro.value.includes(r.supervisor));
+    const bateCoordenador = (coordenadorFiltro.value?.length ?? 0) === 0 || (!!r.coordenador && coordenadorFiltro.value.includes(r.coordenador));
     const bateBusca = !busca.value || r.identificador.toLowerCase().includes(busca.value.toLowerCase());
-    const bateStatus = statusFiltro.value.length === 0 || statusFiltro.value.includes(r.status);
+    const bateStatus = (statusFiltro.value?.length ?? 0) === 0 || statusFiltro.value.includes(r.status);
     return bateBase && bateTipo && bateSupervisor && bateCoordenador && bateBusca && bateStatus;
   }),
 );
@@ -428,10 +431,10 @@ const rowsFiltradas = computed(() =>
 // próprio filtro de status (senão marcar "Atrasado" faria a contagem de "Pendente" sumir).
 const linhasParaStats = computed(() =>
   todasLinhas.value.filter((r) => {
-    const bateBase = baseFiltro.value.length === 0 || baseFiltro.value.includes(r.baseId);
-    const bateTipo = tipoFiltro.value.length === 0 || tipoFiltro.value.includes(r.tipo);
-    const bateSupervisor = supervisorFiltro.value.length === 0 || (!!r.supervisor && supervisorFiltro.value.includes(r.supervisor));
-    const bateCoordenador = coordenadorFiltro.value.length === 0 || (!!r.coordenador && coordenadorFiltro.value.includes(r.coordenador));
+    const bateBase = (baseFiltro.value?.length ?? 0) === 0 || baseFiltro.value.includes(r.baseId);
+    const bateTipo = (tipoFiltro.value?.length ?? 0) === 0 || tipoFiltro.value.includes(r.tipo);
+    const bateSupervisor = (supervisorFiltro.value?.length ?? 0) === 0 || (!!r.supervisor && supervisorFiltro.value.includes(r.supervisor));
+    const bateCoordenador = (coordenadorFiltro.value?.length ?? 0) === 0 || (!!r.coordenador && coordenadorFiltro.value.includes(r.coordenador));
     const bateBusca = !busca.value || r.identificador.toLowerCase().includes(busca.value.toLowerCase());
     return bateBase && bateTipo && bateSupervisor && bateCoordenador && bateBusca;
   }),
@@ -466,11 +469,11 @@ watch(visaoGrafico, () => {
 const temFiltroAtivo = computed(
   () =>
     !!busca.value ||
-    baseFiltro.value.length > 0 ||
-    tipoFiltro.value.length > 0 ||
-    supervisorFiltro.value.length > 0 ||
-    coordenadorFiltro.value.length > 0 ||
-    statusFiltro.value.length > 0,
+    (baseFiltro.value?.length ?? 0) > 0 ||
+    (tipoFiltro.value?.length ?? 0) > 0 ||
+    (supervisorFiltro.value?.length ?? 0) > 0 ||
+    (coordenadorFiltro.value?.length ?? 0) > 0 ||
+    (statusFiltro.value?.length ?? 0) > 0,
 );
 
 const colunas: QTableColumn[] = [
