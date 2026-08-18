@@ -48,7 +48,6 @@
             :options="['admin', 'tecnico', 'coordenador']"
             label="Perfil"
             filled
-            :disable="!!editando"
           />
           <q-select
             v-if="forma.role === 'tecnico'"
@@ -224,6 +223,7 @@ async function salvar() {
     if (editando.value) {
       await api.put(`/usuarios/${editando.value.id}`, {
         nome: forma.value.nome,
+        role: forma.value.role,
         supervisor: forma.value.role === 'tecnico' ? forma.value.supervisor : null,
         coordenador: forma.value.role === 'coordenador' ? forma.value.coordenador : null,
         ativo: forma.value.ativo,

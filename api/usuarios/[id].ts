@@ -18,16 +18,24 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { nome, supervisor, coordenador, ativo, senha } = req.body || {};
+  const { nome, role, supervisor, coordenador, ativo, senha } = req.body || {};
+
+  const ROLES = ['admin', 'tecnico', 'coordenador'];
+  if (role !== undefined && !ROLES.includes(role)) {
+    res.status(400).json({ error: `Perfil inválido. Use: ${ROLES.join(', ')}` });
+    return;
+  }
+
   const senhaHash = senha ? await hashPassword(senha) : null;
 
   const rows = await sql`
     update usuarios
     set
-      nome = coalesce(${nome ?? null}, nome),
+      nome       = coalesce(${nome ?? null}, nome),
+      role       = coalesce(${role ?? null}::user_role, role),
       supervisor = case when ${supervisor === undefined} then supervisor else ${supervisor ?? null} end,
       coordenador = case when ${coordenador === undefined} then coordenador else ${coordenador ?? null} end,
-      ativo = coalesce(${ativo ?? null}, ativo),
+      ativo      = coalesce(${ativo ?? null}, ativo),
       senha_hash = coalesce(${senhaHash}, senha_hash)
     where id = ${id}
     returning id, nome, usuario, role, base_id, supervisor, coordenador, ativo, created_at
