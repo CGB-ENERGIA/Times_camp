@@ -33,7 +33,7 @@
 
     <q-table
       :rows="registros"
-      :columns="colunas"
+      :columns="colunasVisiveis"
       row-key="id"
       :loading="carregando"
       flat
@@ -45,7 +45,31 @@
           <q-badge :color="corStatus(props.row)" :label="labelStatus(props.row)" />
         </q-td>
       </template>
+      <template #body-cell-acoes="props">
+        <q-td :props="props" auto-width>
+          <q-btn flat dense round icon="edit" size="sm" color="primary" @click="abrirEdicao(props.row)" />
+          <q-btn flat dense round icon="delete" size="sm" color="negative" class="q-ml-xs" @click="confirmarExclusao(props.row)" />
+        </q-td>
+      </template>
     </q-table>
+
+    <!-- Diálogo de edição -->
+    <q-dialog v-model="editDialogAberto">
+      <q-card style="width: 360px; max-width: 90vw">
+        <q-card-section>
+          <div class="text-subtitle1">Editar registro</div>
+          <div class="text-caption text-grey-6">{{ editando?.tipo }} · {{ editando?.identificador }} — {{ editando?.data }}</div>
+        </q-card-section>
+        <q-card-section class="q-gutter-md">
+          <q-input v-model="editHora" type="time" label="Hora de saída" filled dense />
+          <q-input v-model="editObs" label="Observação" filled dense clearable />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat label="Cancelar" v-close-popup />
+          <q-btn color="primary" label="Salvar" :loading="salvandoEdicao" @click="salvarEdicao" />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
 
     <q-dialog v-model="exportDialogAberto">
       <q-card style="width: 380px; max-width: 90vw">
@@ -113,6 +137,7 @@ import { useQuasar } from 'quasar';
 import ExcelJS from 'exceljs';
 import { api } from '@/boot/axios';
 import { hojeStr } from '@/utils/date';
+import { useAuthStore } from '@/stores/auth';
 
 interface Registro {
   id: number;
@@ -136,8 +161,60 @@ interface BaseOpcao {
 }
 
 const $q = useQuasar();
+const auth = useAuthStore();
 
 const registros = ref<Registro[]>([]);
+
+// Edição
+const editDialogAberto = ref(false);
+const editando = ref<Registro | null>(null);
+const editHora = ref('');
+const editObs = ref('');
+const salvandoEdicao = ref(false);
+
+function abrirEdicao(row: Registro) {
+  editando.value = row;
+  editHora.value = row.hora_saida.slice(0, 5);
+  editObs.value = row.observacao ?? '';
+  editDialogAberto.value = true;
+}
+
+async function salvarEdicao() {
+  if (!editando.value) return;
+  salvandoEdicao.value = true;
+  try {
+    await api.put(`/saidas/${editando.value.id}`, {
+      horaSaida: editHora.value,
+      observacao: editObs.value || null,
+    });
+    editDialogAberto.value = false;
+    await carregar();
+    $q.notify({ type: 'positive', message: 'Registro atualizado.' });
+  } catch {
+    $q.notify({ type: 'negative', message: 'Erro ao salvar.' });
+  } finally {
+    salvandoEdicao.value = false;
+  }
+}
+
+function confirmarExclusao(row: Registro) {
+  $q.dialog({
+    title: 'Excluir registro',
+    message: `Deseja excluir o apontamento de <b>${row.tipo} · ${row.identificador}</b> em ${row.data}?`,
+    html: true,
+    cancel: true,
+    persistent: true,
+    ok: { label: 'Excluir', color: 'negative', unelevated: true },
+  }).onOk(async () => {
+    try {
+      await api.delete(`/saidas/${row.id}`);
+      await carregar();
+      $q.notify({ type: 'positive', message: 'Registro excluído.' });
+    } catch {
+      $q.notify({ type: 'negative', message: 'Erro ao excluir.' });
+    }
+  });
+}
 const opcoesBase = ref<Array<{ label: string; value: number }>>([]);
 const filtroBaseId = ref<number | null>(null);
 const dataInicio = ref('');
@@ -176,7 +253,12 @@ const colunas: QTableColumn[] = [
   { name: 'coordenador', label: 'Coordenador', field: 'coordenador', align: 'left', sortable: true },
   { name: 'registrado_por_nome', label: 'Registrado por', field: 'registrado_por_nome', align: 'left' },
   { name: 'observacao', label: 'Observação', field: 'observacao', align: 'left' },
+  { name: 'acoes', label: '', field: 'id', align: 'center' },
 ];
+
+const colunasVisiveis = computed(() =>
+  auth.isAdmin ? colunas : colunas.filter((c) => c.name !== 'acoes'),
+);
 
 function corStatus(row: Registro) {
   return row.hora_saida <= row.horario_padrao_saida ? 'positive' : 'negative';
