@@ -15,6 +15,15 @@
         style="min-width: 200px"
         @update:model-value="carregar"
       />
+      <q-select
+        v-model="filtroTipo"
+        :options="tipos"
+        label="Tipo"
+        filled
+        dense
+        clearable
+        style="min-width: 130px"
+      />
       <q-input
         v-model="busca"
         dense
@@ -293,6 +302,7 @@ const $q = useQuasar();
 const equipes = ref<Equipe[]>([]);
 const opcoesBase = ref<Array<{ label: string; value: number }>>([]);
 const filtroBaseId = ref<number | null>(null);
+const filtroTipo = ref<string | null>(null);
 const busca = ref('');
 const carregando = ref(false);
 const dialogoAberto = ref(false);
@@ -319,14 +329,16 @@ const forma = ref({
 
 const equipesFiltradas = computed(() => {
   const q = (busca.value ?? '').toLowerCase().trim();
-  if (!q) return equipes.value;
-  return equipes.value.filter(
-    (e) =>
+  return equipes.value.filter((e) => {
+    if (filtroTipo.value && e.tipo !== filtroTipo.value) return false;
+    if (!q) return true;
+    return (
       e.identificador.toLowerCase().includes(q) ||
       (e.supervisor ?? '').toLowerCase().includes(q) ||
       (e.coordenador ?? '').toLowerCase().includes(q) ||
-      e.tipo.toLowerCase().includes(q),
-  );
+      e.tipo.toLowerCase().includes(q)
+    );
+  });
 });
 
 const colunas: QTableColumn[] = [
