@@ -526,9 +526,11 @@ async function onExcelSelecionado(event: Event) {
       let status: LinhaImport['status'];
       if (!equipe) {
         status = 'novo';
-      } else if (supervisor === (equipe.supervisor ?? '') && coordenador === (equipe.coordenador ?? '')) {
+      } else if (!supervisor && !coordenador) {
+        // linha sem dados — nada a importar
         status = 'sem_alteracao';
       } else {
+        // tem dados preenchidos → vai importar (mesmo que sejam os mesmos do banco)
         status = 'ok';
       }
 
