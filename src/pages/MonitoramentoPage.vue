@@ -1357,19 +1357,19 @@ async function exportarDetalhe() {
     const IW = W - PAD * 2;
     const H_HEADER = 106;
     const H_SUBTIT = 44;
-    const H_FOOTER = 38;
-    const BASE_HEAD_H = 38;
-    const CHIP_H = 30;
-    const CHIP_GAP = 6;
-    const CHIPS_PER_ROW = 5;
-    const CHIP_W = Math.floor(IW / CHIPS_PER_ROW);
-    const BASE_BOT_GAP = 20;
+    const H_FOOTER = 46;
+    const BASE_HEAD_H = 42;   // barra azul da base
+    const ROW_H = 32;          // altura de cada linha de equipe
+    const COLS = 2;            // equipes por linha
+    const COL_W = IW / COLS;
+    const CALC_H = 52;         // box de cálculo da média
+    const BASE_GAP = 20;       // espaço entre bases
 
-    // calcula altura total dinâmica
+    // altura total dinâmica
     let totalH = H_HEADER + H_SUBTIT + PAD + H_FOOTER;
     for (const b of bases) {
-      const rows = Math.ceil(b.equipes.length / CHIPS_PER_ROW);
-      totalH += BASE_HEAD_H + rows * (CHIP_H + CHIP_GAP) + BASE_BOT_GAP;
+      const nRows = Math.ceil(b.equipes.length / COLS);
+      totalH += BASE_HEAD_H + nRows * ROW_H + CALC_H + BASE_GAP;
     }
 
     const canvas = document.createElement('canvas');
@@ -1433,87 +1433,115 @@ async function exportarDetalhe() {
     // === BASES ===
     for (const base of bases) {
       const comSaida = base.equipes.filter((e) => e.horaSaida);
-      const media = comSaida.length
-        ? Math.round(comSaida.reduce((a, e) => a + toMinutos(e.horaSaida!), 0) / comSaida.length)
-        : null;
+      const somaMin = comSaida.reduce((a, e) => a + toMinutos(e.horaSaida!), 0);
+      const media = comSaida.length ? Math.round(somaMin / comSaida.length) : null;
       const mediaOk = media !== null && media <= 510;
+      const nRows = Math.ceil(base.equipes.length / COLS);
 
-      // cabeçalho da base
-      txt(base.baseNome, PAD, y + 16, 'bold 15px Arial', '#1e293b');
-
-      // badges inline
-      let bx = PAD + ctx.measureText(base.baseNome).width + 12;
-      const drawBadge = (label: string, bg: string) => {
+      // ── Barra de cabeçalho da base ──
+      ctx.fillStyle = '#1e3a5f';
+      ctx.fillRect(PAD, y, IW, BASE_HEAD_H);
+      // nome da base
+      txt(base.baseNome.toUpperCase(), PAD + 14, y + BASE_HEAD_H / 2 + 5, 'bold 15px Arial', '#ffffff');
+      // badges à direita
+      const drawBadge2 = (label: string, bg: string, rx: number) => {
         ctx.save(); ctx.font = 'bold 10px Arial';
-        const tw = ctx.measureText(label).width;
-        const bw = tw + 10; const bh = 16;
-        rr(bx, y + 2, bw, bh, 4);
+        const bw = ctx.measureText(label).width + 14; const bh = 18;
+        rr(rx - bw, y + (BASE_HEAD_H - bh) / 2, bw, bh, 4);
         ctx.fillStyle = bg; ctx.fill();
         ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
-        ctx.fillText(label, bx + bw / 2, y + 2 + bh / 2);
+        ctx.fillText(label, rx - bw / 2, y + BASE_HEAD_H / 2);
         ctx.restore();
-        bx += bw + 5;
+        return rx - bw - 6;
       };
-      drawBadge(`${base.stats.no_prazo} no prazo`, '#16a34a');
-      if (base.stats.atrasado > 0) drawBadge(`${base.stats.atrasado} atrasada(s)`, '#dc2626');
-      if (base.stats.pendente > 0) drawBadge(`${base.stats.pendente} pendente(s)`, '#9ca3af');
-
-      // média à direita
-      if (media !== null) {
-        const mediaStr = `Média  ${formatarMinutos(media)}`;
-        ctx.save(); ctx.font = 'bold 15px Arial';
-        const mw = ctx.measureText(mediaStr).width + 24;
-        rr(W - PAD - mw, y, mw, 22, 5);
-        ctx.fillStyle = mediaOk ? '#dcfce7' : '#fee2e2'; ctx.fill();
-        ctx.restore();
-        txt(mediaStr, W - PAD - 12, y + 15, 'bold 13px Arial', mediaOk ? '#15803d' : '#dc2626', 'right');
-      }
-
+      let rx2 = W - PAD - 6;
+      if (base.stats.pendente > 0) rx2 = drawBadge2(`${base.stats.pendente} pendente(s)`, '#6b7280', rx2);
+      if (base.stats.atrasado > 0) rx2 = drawBadge2(`${base.stats.atrasado} atrasada(s)`, '#b91c1c', rx2);
+      drawBadge2(`${base.stats.no_prazo} no prazo`, '#15803d', rx2);
       y += BASE_HEAD_H;
 
-      // chips das equipes
+      // ── Linhas de equipe em 2 colunas ──
       base.equipes.forEach((eq, idx) => {
-        const col = idx % CHIPS_PER_ROW;
-        const row = Math.floor(idx / CHIPS_PER_ROW);
-        const cx = PAD + col * CHIP_W;
-        const cy = y + row * (CHIP_H + CHIP_GAP);
-        const cw = CHIP_W - 6;
-        const ch = CHIP_H;
-
+        const col = idx % COLS;
+        const row = Math.floor(idx / COLS);
+        const x0 = PAD + col * COL_W;
+        const y0 = y + row * ROW_H;
         const cor = eq.status === 'no_prazo' ? '#16a34a' : eq.status === 'atrasado' ? '#dc2626' : '#9ca3af';
-        rr(cx, cy, cw, ch, 5);
-        ctx.fillStyle = `${cor}18`; ctx.fill();
-        ctx.strokeStyle = cor; ctx.lineWidth = 1; ctx.stroke();
+
+        // fundo alternado
+        ctx.fillStyle = row % 2 === 0 ? '#ffffff' : '#f1f5f9';
+        ctx.fillRect(x0, y0, COL_W, ROW_H);
+
+        // barra lateral colorida
+        ctx.fillStyle = cor;
+        ctx.fillRect(x0 + (col === 1 ? 1 : 0), y0 + 5, 4, ROW_H - 10);
 
         // identificador
-        txt(eq.identificador, cx + 8, cy + ch / 2 + 4, 'bold 11px monospace', cor, 'left', cw * 0.58);
+        txt(eq.identificador, x0 + 12, y0 + ROW_H / 2 + 4, 'bold 11.5px monospace', '#334155', 'left', COL_W * 0.55);
 
-        // hora
+        // hora de saída
         if (eq.horaSaida) {
-          txt(eq.horaSaida.slice(0, 5), cx + cw - 8, cy + ch / 2 + 4, 'bold 12px Arial', cor, 'right');
+          txt(eq.horaSaida.slice(0, 5), x0 + COL_W - (eq.atrasoMin ? 46 : 10), y0 + ROW_H / 2 + 4, 'bold 13px Arial', cor, 'right');
+          if (eq.atrasoMin) {
+            txt(`+${eq.atrasoMin}m`, x0 + COL_W - 6, y0 + ROW_H / 2 + 4, 'bold 10px Arial', '#dc2626', 'right');
+          }
         } else {
-          txt('—', cx + cw - 8, cy + ch / 2 + 4, '11px Arial', '#9ca3af', 'right');
-        }
-
-        // atraso
-        if (eq.atrasoMin) {
-          txt(`+${eq.atrasoMin}m`, cx + cw - 8, cy + 11, '9px Arial', '#dc2626', 'right');
+          txt('pendente', x0 + COL_W - 10, y0 + ROW_H / 2 + 4, '11px Arial', '#9ca3af', 'right');
         }
       });
 
-      const rows = Math.ceil(base.equipes.length / CHIPS_PER_ROW);
-      y += rows * (CHIP_H + CHIP_GAP) + BASE_BOT_GAP;
+      // linha separadora central entre colunas
+      ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(PAD + COL_W, y);
+      ctx.lineTo(PAD + COL_W, y + nRows * ROW_H);
+      ctx.stroke();
 
-      // separador
-      ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1;
-      ctx.beginPath(); ctx.moveTo(PAD, y - BASE_BOT_GAP / 2); ctx.lineTo(W - PAD, y - BASE_BOT_GAP / 2); ctx.stroke();
+      // borda inferior da tabela
+      ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+      ctx.beginPath();
+      ctx.moveTo(PAD, y + nRows * ROW_H);
+      ctx.lineTo(W - PAD, y + nRows * ROW_H);
+      ctx.stroke();
+
+      y += nRows * ROW_H;
+
+      // ── Box de cálculo da média ──
+      if (media !== null) {
+        const calcBg = mediaOk ? '#f0fdf4' : '#fff5f5';
+        const calcCor = mediaOk ? '#15803d' : '#b91c1c';
+        const calcBorder = mediaOk ? '#86efac' : '#fca5a5';
+
+        ctx.fillStyle = calcBg;
+        ctx.fillRect(PAD, y, IW, CALC_H);
+        ctx.strokeStyle = calcBorder; ctx.lineWidth = 1.5;
+        ctx.strokeRect(PAD, y, IW, CALC_H);
+
+        // fórmula à esquerda
+        const formulaY1 = y + 18;
+        const formulaY2 = y + 38;
+        txt(`${comSaida.length} equipes com apontamento`, PAD + 14, formulaY1, '11px Arial', '#64748b');
+        const somaHH = formatarMinutos(somaMin);
+        const formula = `Cálculo: ${somaHH} (soma) ÷ ${comSaida.length} equipes = ${formatarMinutos(media)}`;
+        txt(formula, PAD + 14, formulaY2, '11px Arial', calcCor);
+
+        // resultado em destaque à direita
+        const tag = mediaOk ? '✓ No prazo' : '✗ Acima do limite';
+        txt(tag, W - PAD - 14, formulaY1, '10px Arial', calcCor, 'right');
+        txt(formatarMinutos(media), W - PAD - 14, formulaY2 + 2, 'bold 20px Arial', calcCor, 'right');
+      } else {
+        ctx.fillStyle = '#f8fafc';
+        ctx.fillRect(PAD, y, IW, CALC_H);
+        txt('Nenhuma equipe com apontamento registrado nesta base', PAD + 14, y + CALC_H / 2 + 4, '11px Arial', '#9ca3af');
+      }
+
+      y += CALC_H + BASE_GAP;
     }
 
     // === FOOTER ===
-    ctx.fillStyle = '#f1f5f9'; ctx.fillRect(0, totalH - H_FOOTER, W, H_FOOTER);
-    txt('Gerado automaticamente  ·  TimeTrack  ·  CGB Engenharia', W / 2, totalH - H_FOOTER / 2 + 4, '11px Arial', '#94a3b8', 'center');
+    ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, totalH - H_FOOTER, W, H_FOOTER);
+    txt('Gerado automaticamente  ·  TimeTrack  ·  CGB Engenharia', W / 2, totalH - H_FOOTER / 2 + 5, '11px Arial', '#94a3b8', 'center');
 
-    // download
     const url = canvas.toDataURL('image/png');
     const a = document.createElement('a');
     a.href = url; a.download = `detalhe-saidas-${data.value}.png`; a.click();
