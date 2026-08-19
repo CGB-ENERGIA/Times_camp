@@ -242,6 +242,48 @@
         </q-card-section>
       </q-card>
 
+      <!-- Card: Expurgos da média -->
+      <q-card v-if="expurgosPorBase.length" flat bordered class="q-mb-md">
+        <q-card-section class="row items-center q-gutter-sm">
+          <q-icon name="filter_alt" color="amber-8" />
+          <div class="text-subtitle2">Expurgos aplicados à média</div>
+          <div class="text-caption text-grey-6">Menor e maior horário removidos de cada base (mínimo 3 registros)</div>
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="q-pa-sm">
+          <q-markup-table flat dense separator="horizontal">
+            <thead>
+              <tr class="text-grey-7 text-caption">
+                <th class="text-left">Base</th>
+                <th class="text-left">Removido mínimo</th>
+                <th class="text-left">Removido máximo</th>
+                <th class="text-center">Usadas / Total</th>
+                <th class="text-right">Média ajustada</th>
+              </tr>
+            </thead>
+            <tbody>
+              <tr v-for="b in expurgosPorBase" :key="b.baseNome">
+                <td class="text-weight-medium">{{ b.baseNome }}</td>
+                <td>
+                  <q-chip v-if="b.expMin" dense square size="sm" color="blue-grey-2" text-color="blue-grey-9" icon="arrow_downward">
+                    {{ b.expMin.identificador }} · {{ b.expMin.horaSaida?.slice(0,5) }}
+                  </q-chip>
+                </td>
+                <td>
+                  <q-chip v-if="b.expMax" dense square size="sm" color="deep-orange-2" text-color="deep-orange-9" icon="arrow_upward">
+                    {{ b.expMax.identificador }} · {{ b.expMax.horaSaida?.slice(0,5) }}
+                  </q-chip>
+                </td>
+                <td class="text-center text-caption text-grey-7">{{ b.count }} / {{ b.total }}</td>
+                <td class="text-right text-weight-bold" :class="b.media !== null && b.media <= 510 ? 'text-positive' : 'text-negative'">
+                  {{ b.media !== null ? formatarMinutos(b.media) : '—' }}
+                </td>
+              </tr>
+            </tbody>
+          </q-markup-table>
+        </q-card-section>
+      </q-card>
+
       <!-- Gráfico: detalhe de equipes por base -->
       <q-card flat bordered class="q-mb-md">
         <q-card-section class="row items-center q-gutter-sm">
@@ -635,6 +677,23 @@ function toMinutos(hhmmss: string): number {
   return (h ?? 0) * 60 + (m ?? 0);
 }
 
+type Linha = typeof todasLinhas.value[0];
+type ResultadoMedia = { media: number | null; count: number; expMin: Linha | null; expMax: Linha | null };
+
+function calcMediaAjustada(saidas: Linha[]): ResultadoMedia {
+  if (!saidas.length) return { media: null, count: 0, expMin: null, expMax: null };
+  const sorted = [...saidas].sort((a, b) => toMinutos(a.horaSaida!) - toMinutos(b.horaSaida!));
+  if (sorted.length <= 2) {
+    const soma = sorted.reduce((a, r) => a + toMinutos(r.horaSaida!), 0);
+    return { media: Math.round(soma / sorted.length), count: sorted.length, expMin: null, expMax: null };
+  }
+  const expMin = sorted[0]!;
+  const expMax = sorted[sorted.length - 1]!;
+  const restantes = sorted.slice(1, -1);
+  const soma = restantes.reduce((a, r) => a + toMinutos(r.horaSaida!), 0);
+  return { media: Math.round(soma / restantes.length), count: restantes.length, expMin, expMax };
+}
+
 const todasEquipes = computed(() => resposta.value?.bases.flatMap((b) => b.equipes) ?? []);
 
 const opcoesBase = computed(() => (resposta.value?.bases ?? []).map((b) => ({ label: b.baseNome, value: b.baseId })));
@@ -841,8 +900,8 @@ const dadosGraficoMedia = computed<any>(() => {
   const porBase = bases.map((b) => {
     const saidas = rowsFiltradas.value.filter((r) => r.baseNome === b && r.horaSaida);
     if (!saidas.length) return { media: null, count: 0 };
-    const media = Math.round(saidas.reduce((acc, r) => acc + toMinutos(r.horaSaida!), 0) / saidas.length);
-    return { media, count: saidas.length };
+    const { media, count } = calcMediaAjustada(saidas);
+    return { media, count };
   });
   return {
     labels: bases,
@@ -924,6 +983,18 @@ const equipesPorBase = computed(() => {
       pendente: rowsFiltradas.value.filter((r) => r.baseNome === baseNome && r.status === 'pendente').length,
     },
   }));
+});
+
+// ----- Expurgos da média (min e max removidos por base) -----
+const expurgosPorBase = computed(() => {
+  const bases = [...new Set(rowsFiltradas.value.map((r) => r.baseNome))].sort();
+  return bases
+    .map((baseNome) => {
+      const saidas = rowsFiltradas.value.filter((r) => r.baseNome === baseNome && r.horaSaida);
+      const { media, count, expMin, expMax } = calcMediaAjustada(saidas);
+      return { baseNome, media, count, total: saidas.length, expMin, expMax };
+    })
+    .filter((b) => b.expMin !== null || b.expMax !== null);
 });
 
 // ----- Gráfico 3: heatmap de horário de saída por base -----
@@ -1433,8 +1504,10 @@ async function exportarDetalhe() {
     // === BASES ===
     for (const base of bases) {
       const comSaida = base.equipes.filter((e) => e.horaSaida);
-      const somaMin = comSaida.reduce((a, e) => a + toMinutos(e.horaSaida!), 0);
-      const media = comSaida.length ? Math.round(somaMin / comSaida.length) : null;
+      const { media, count: countUsado, expMin, expMax } = calcMediaAjustada(comSaida);
+      const somaUsada = comSaida
+        .filter((e) => e.equipeId !== expMin?.equipeId && e.equipeId !== expMax?.equipeId)
+        .reduce((a, e) => a + toMinutos(e.horaSaida!), 0);
       const mediaOk = media !== null && media <= 510;
       const nRows = Math.ceil(base.equipes.length / COLS);
 
@@ -1466,23 +1539,40 @@ async function exportarDetalhe() {
         const row = Math.floor(idx / COLS);
         const x0 = PAD + col * COL_W;
         const y0 = y + row * ROW_H;
-        const cor = eq.status === 'no_prazo' ? '#16a34a' : eq.status === 'atrasado' ? '#dc2626' : '#9ca3af';
+        const isExpurgo = eq.equipeId === expMin?.equipeId || eq.equipeId === expMax?.equipeId;
+        const ehMin = eq.equipeId === expMin?.equipeId;
+        const ehMax = eq.equipeId === expMax?.equipeId;
+        const cor = isExpurgo ? '#94a3b8' : eq.status === 'no_prazo' ? '#16a34a' : eq.status === 'atrasado' ? '#dc2626' : '#9ca3af';
 
-        // fundo alternado
-        ctx.fillStyle = row % 2 === 0 ? '#ffffff' : '#f1f5f9';
+        // fundo: expurgos têm fundo acinzentado especial
+        ctx.fillStyle = isExpurgo ? '#e2e8f0' : row % 2 === 0 ? '#ffffff' : '#f1f5f9';
         ctx.fillRect(x0, y0, COL_W, ROW_H);
 
-        // barra lateral colorida
-        ctx.fillStyle = cor;
+        // barra lateral: azul-acinzentada para expurgos
+        ctx.fillStyle = isExpurgo ? '#64748b' : cor;
         ctx.fillRect(x0 + (col === 1 ? 1 : 0), y0 + 5, 4, ROW_H - 10);
 
-        // identificador
-        txt(eq.identificador, x0 + 12, y0 + ROW_H / 2 + 4, 'bold 11.5px monospace', '#334155', 'left', COL_W * 0.55);
+        // tag EXP min/max
+        if (isExpurgo) {
+          const tag = ehMin ? '↓mín' : (ehMax ? '↑máx' : '');
+          const tagColor = ehMin ? '#2563eb' : '#ea580c';
+          ctx.save(); ctx.font = 'bold 8px Arial';
+          const tw = ctx.measureText(tag).width + 6;
+          rr(x0 + COL_W - tw - 4, y0 + 4, tw, 12, 2);
+          ctx.fillStyle = tagColor; ctx.fill();
+          ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+          ctx.fillText(tag, x0 + COL_W - tw / 2 - 4, y0 + 10);
+          ctx.restore();
+        }
+
+        // identificador (acinzentado se expurgo)
+        txt(eq.identificador, x0 + 12, y0 + ROW_H / 2 + 4, 'bold 11.5px monospace', isExpurgo ? '#64748b' : '#334155', 'left', COL_W * 0.55);
 
         // hora de saída
         if (eq.horaSaida) {
-          txt(eq.horaSaida.slice(0, 5), x0 + COL_W - (eq.atrasoMin ? 46 : 10), y0 + ROW_H / 2 + 4, 'bold 13px Arial', cor, 'right');
-          if (eq.atrasoMin) {
+          const timeX = x0 + COL_W - (isExpurgo ? 52 : eq.atrasoMin ? 46 : 10);
+          txt(eq.horaSaida.slice(0, 5), timeX, y0 + ROW_H / 2 + 4, `bold 13px Arial`, cor, 'right');
+          if (!isExpurgo && eq.atrasoMin) {
             txt(`+${eq.atrasoMin}m`, x0 + COL_W - 6, y0 + ROW_H / 2 + 4, 'bold 10px Arial', '#dc2626', 'right');
           }
         } else {
@@ -1517,15 +1607,26 @@ async function exportarDetalhe() {
         ctx.strokeStyle = calcBorder; ctx.lineWidth = 1.5;
         ctx.strokeRect(PAD, y, IW, CALC_H);
 
-        // fórmula à esquerda
         const formulaY1 = y + 18;
         const formulaY2 = y + 38;
-        txt(`${comSaida.length} equipes com apontamento`, PAD + 14, formulaY1, '11px Arial', '#64748b');
-        const somaHH = formatarMinutos(somaMin);
-        const formula = `Cálculo: ${somaHH} (soma) ÷ ${comSaida.length} equipes = ${formatarMinutos(media)}`;
+
+        // linha 1: info dos expurgos
+        if (expMin || expMax) {
+          const expInfo = [
+            expMin ? `↓mín expurgado: ${expMin.identificador} ${expMin.horaSaida?.slice(0,5)}` : '',
+            expMax ? `↑máx expurgado: ${expMax.identificador} ${expMax.horaSaida?.slice(0,5)}` : '',
+          ].filter(Boolean).join('   ·   ');
+          txt(expInfo, PAD + 14, formulaY1, '10.5px Arial', '#64748b');
+        } else {
+          txt(`${comSaida.length} equipe(s) com apontamento — sem expurgos`, PAD + 14, formulaY1, '10.5px Arial', '#64748b');
+        }
+
+        // linha 2: fórmula
+        const somaHH = formatarMinutos(somaUsada);
+        const formula = `Cálculo: ${somaHH} (soma de ${countUsado}) ÷ ${countUsado} equipes = ${formatarMinutos(media)}`;
         txt(formula, PAD + 14, formulaY2, '11px Arial', calcCor);
 
-        // resultado em destaque à direita
+        // resultado à direita
         const tag = mediaOk ? '✓ No prazo' : '✗ Acima do limite';
         txt(tag, W - PAD - 14, formulaY1, '10px Arial', calcCor, 'right');
         txt(formatarMinutos(media), W - PAD - 14, formulaY2 + 2, 'bold 20px Arial', calcCor, 'right');
