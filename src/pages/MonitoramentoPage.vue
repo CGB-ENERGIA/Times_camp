@@ -247,6 +247,10 @@
         <q-card-section class="row items-center q-gutter-sm">
           <div class="text-subtitle2">Equipes por base — detalhe</div>
           <div class="text-caption text-grey-6">{{ data }}</div>
+          <q-space />
+          <q-btn flat dense round icon="ios_share" :loading="exportandoDetalhe" @click="exportarDetalhe">
+            <q-tooltip>Exportar detalhamento por base</q-tooltip>
+          </q-btn>
         </q-card-section>
         <q-separator />
         <q-card-section>
@@ -463,6 +467,7 @@ const exportandoMedia = ref(false);
 const exportandoMapa = ref(false);
 const exportandoPendentes = ref(false);
 const exportandoResumo = ref(false);
+const exportandoDetalhe = ref(false);
 
 const busca = ref('');
 const baseFiltro = ref<number[]>([]);
@@ -1326,6 +1331,196 @@ async function exportarMapa() {
     await capturarEl(cardEl, `mapa-historico-${ini}-a-${fim}.png`);
   } finally {
     exportandoMapa.value = false;
+  }
+}
+
+async function exportarDetalhe() {
+  if (exportandoDetalhe.value) return;
+  exportandoDetalhe.value = true;
+  try {
+    const bases = equipesPorBase.value;
+    if (!bases.length) {
+      $q.notify({ type: 'info', message: 'Nenhum dado para exportar' });
+      return;
+    }
+
+    const logo = await new Promise<HTMLImageElement | null>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = '/icons/logo-cgb.png';
+    });
+
+    const SCALE = 2;
+    const W = 860;
+    const PAD = 28;
+    const IW = W - PAD * 2;
+    const H_HEADER = 106;
+    const H_SUBTIT = 44;
+    const H_FOOTER = 38;
+    const BASE_HEAD_H = 38;
+    const CHIP_H = 30;
+    const CHIP_GAP = 6;
+    const CHIPS_PER_ROW = 5;
+    const CHIP_W = Math.floor(IW / CHIPS_PER_ROW);
+    const BASE_BOT_GAP = 20;
+
+    // calcula altura total dinâmica
+    let totalH = H_HEADER + H_SUBTIT + PAD + H_FOOTER;
+    for (const b of bases) {
+      const rows = Math.ceil(b.equipes.length / CHIPS_PER_ROW);
+      totalH += BASE_HEAD_H + rows * (CHIP_H + CHIP_GAP) + BASE_BOT_GAP;
+    }
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W * SCALE;
+    canvas.height = totalH * SCALE;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(SCALE, SCALE);
+
+    // helpers
+    function rr(x: number, y: number, w: number, h: number, r = 6) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y, x + w, y + r, r); ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r); ctx.lineTo(x + r, y + h);
+      ctx.arcTo(x, y + h, x, y + h - r, r); ctx.lineTo(x, y + r);
+      ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
+    }
+    function txt(s: string, x: number, y: number, font = '12px Arial', color = '#1c1c2e', align: CanvasTextAlign = 'left', maxW?: number) {
+      ctx.save(); ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+      maxW !== undefined ? ctx.fillText(s, x, y, maxW) : ctx.fillText(s, x, y);
+      ctx.restore();
+    }
+
+    // === FUNDO ===
+    ctx.fillStyle = '#f8fafc';
+    ctx.fillRect(0, 0, W, totalH);
+
+    // === HEADER ===
+    const hGrad = ctx.createLinearGradient(0, 0, W, H_HEADER);
+    hGrad.addColorStop(0, '#16387a'); hGrad.addColorStop(1, '#091628');
+    ctx.fillStyle = hGrad; ctx.fillRect(0, 0, W, H_HEADER);
+    ctx.fillStyle = '#f59e0b'; ctx.fillRect(0, H_HEADER - 5, W, 5);
+
+    const LOGO_H = 80;
+    const LY = (H_HEADER - 5 - LOGO_H) / 2;
+    let logoDrawW = 0;
+    if (logo) {
+      const nw = logo.naturalWidth || logo.width;
+      const nh = logo.naturalHeight || logo.height;
+      const ls = LOGO_H / nh;
+      logoDrawW = nw * ls;
+      ctx.save();
+      ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 18;
+      ctx.shadowOffsetX = 1; ctx.shadowOffsetY = 2;
+      ctx.drawImage(logo, PAD, LY, logoDrawW, LOGO_H);
+      ctx.restore();
+    }
+    const TX = PAD + (logo ? logoDrawW + 18 : 0);
+    txt('CGB ENERGIA', TX, H_HEADER / 2 - 5, 'bold 28px Arial', '#ffffff');
+    txt('Monitoramento de Saídas de Campo', TX, H_HEADER / 2 + 22, '13px Arial', 'rgba(255,255,255,0.6)');
+    txt(data.value, W - PAD, 34, 'bold 13px Arial', 'rgba(255,255,255,0.55)', 'right');
+
+    // === SUBTÍTULO ===
+    let y = H_HEADER;
+    ctx.fillStyle = '#1e3a5f'; ctx.fillRect(0, y, W, H_SUBTIT);
+    txt('Detalhamento · Horários de Saída por Base', PAD, y + H_SUBTIT / 2 + 5, 'bold 14px Arial', '#ffffff');
+    txt(data.value, W - PAD, y + H_SUBTIT / 2 + 5, '13px Arial', 'rgba(255,255,255,0.55)', 'right');
+    y += H_SUBTIT + PAD;
+
+    // === BASES ===
+    for (const base of bases) {
+      const comSaida = base.equipes.filter((e) => e.horaSaida);
+      const media = comSaida.length
+        ? Math.round(comSaida.reduce((a, e) => a + toMinutos(e.horaSaida!), 0) / comSaida.length)
+        : null;
+      const mediaOk = media !== null && media <= 510;
+
+      // cabeçalho da base
+      txt(base.baseNome, PAD, y + 16, 'bold 15px Arial', '#1e293b');
+
+      // badges inline
+      let bx = PAD + ctx.measureText(base.baseNome).width + 12;
+      const drawBadge = (label: string, bg: string) => {
+        ctx.save(); ctx.font = 'bold 10px Arial';
+        const tw = ctx.measureText(label).width;
+        const bw = tw + 10; const bh = 16;
+        rr(bx, y + 2, bw, bh, 4);
+        ctx.fillStyle = bg; ctx.fill();
+        ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+        ctx.fillText(label, bx + bw / 2, y + 2 + bh / 2);
+        ctx.restore();
+        bx += bw + 5;
+      };
+      drawBadge(`${base.stats.no_prazo} no prazo`, '#16a34a');
+      if (base.stats.atrasado > 0) drawBadge(`${base.stats.atrasado} atrasada(s)`, '#dc2626');
+      if (base.stats.pendente > 0) drawBadge(`${base.stats.pendente} pendente(s)`, '#9ca3af');
+
+      // média à direita
+      if (media !== null) {
+        const mediaStr = `Média  ${formatarMinutos(media)}`;
+        ctx.save(); ctx.font = 'bold 15px Arial';
+        const mw = ctx.measureText(mediaStr).width + 24;
+        rr(W - PAD - mw, y, mw, 22, 5);
+        ctx.fillStyle = mediaOk ? '#dcfce7' : '#fee2e2'; ctx.fill();
+        ctx.restore();
+        txt(mediaStr, W - PAD - 12, y + 15, 'bold 13px Arial', mediaOk ? '#15803d' : '#dc2626', 'right');
+      }
+
+      y += BASE_HEAD_H;
+
+      // chips das equipes
+      base.equipes.forEach((eq, idx) => {
+        const col = idx % CHIPS_PER_ROW;
+        const row = Math.floor(idx / CHIPS_PER_ROW);
+        const cx = PAD + col * CHIP_W;
+        const cy = y + row * (CHIP_H + CHIP_GAP);
+        const cw = CHIP_W - 6;
+        const ch = CHIP_H;
+
+        const cor = eq.status === 'no_prazo' ? '#16a34a' : eq.status === 'atrasado' ? '#dc2626' : '#9ca3af';
+        rr(cx, cy, cw, ch, 5);
+        ctx.fillStyle = `${cor}18`; ctx.fill();
+        ctx.strokeStyle = cor; ctx.lineWidth = 1; ctx.stroke();
+
+        // identificador
+        txt(eq.identificador, cx + 8, cy + ch / 2 + 4, 'bold 11px monospace', cor, 'left', cw * 0.58);
+
+        // hora
+        if (eq.horaSaida) {
+          txt(eq.horaSaida.slice(0, 5), cx + cw - 8, cy + ch / 2 + 4, 'bold 12px Arial', cor, 'right');
+        } else {
+          txt('—', cx + cw - 8, cy + ch / 2 + 4, '11px Arial', '#9ca3af', 'right');
+        }
+
+        // atraso
+        if (eq.atrasoMin) {
+          txt(`+${eq.atrasoMin}m`, cx + cw - 8, cy + 11, '9px Arial', '#dc2626', 'right');
+        }
+      });
+
+      const rows = Math.ceil(base.equipes.length / CHIPS_PER_ROW);
+      y += rows * (CHIP_H + CHIP_GAP) + BASE_BOT_GAP;
+
+      // separador
+      ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1;
+      ctx.beginPath(); ctx.moveTo(PAD, y - BASE_BOT_GAP / 2); ctx.lineTo(W - PAD, y - BASE_BOT_GAP / 2); ctx.stroke();
+    }
+
+    // === FOOTER ===
+    ctx.fillStyle = '#f1f5f9'; ctx.fillRect(0, totalH - H_FOOTER, W, H_FOOTER);
+    txt('Gerado automaticamente  ·  TimeTrack  ·  CGB Engenharia', W / 2, totalH - H_FOOTER / 2 + 4, '11px Arial', '#94a3b8', 'center');
+
+    // download
+    const url = canvas.toDataURL('image/png');
+    const a = document.createElement('a');
+    a.href = url; a.download = `detalhe-saidas-${data.value}.png`; a.click();
+
+    $q.notify({ type: 'positive', message: 'Imagem de detalhamento gerada!' });
+  } finally {
+    exportandoDetalhe.value = false;
   }
 }
 
