@@ -72,7 +72,7 @@
             use-chips
             use-input
             input-debounce="0"
-            :filter-fn="filtrarEquipes"
+            @filter="filtrarEquipes"
           />
           <q-select
             v-if="forma.role === 'coordenador'"
