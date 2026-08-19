@@ -16,7 +16,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   const rows = await sql`
-    select id, nome, usuario, senha_hash, role, base_id, supervisor, coordenador, ativo
+    select id, nome, usuario, senha_hash, role, base_id, supervisor, coordenador, supervisores, coordenadores, ativo
     from usuarios
     where usuario = ${usuario}
   `;
@@ -41,6 +41,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     baseId: user.base_id,
     supervisor: user.supervisor,
     coordenador: user.coordenador,
+    supervisores: user.supervisores ?? [],
+    coordenadores: user.coordenadores ?? [],
   });
   setSessionCookie(res, token);
 

@@ -19,6 +19,8 @@ export interface SessionPayload {
   baseId: number | null;
   supervisor: string | null;
   coordenador: string | null;
+  supervisores: string[];
+  coordenadores: string[];
 }
 
 export function signSession(payload: SessionPayload): string {

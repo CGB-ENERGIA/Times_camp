@@ -51,19 +51,23 @@
           />
           <q-select
             v-if="forma.role === 'tecnico'"
-            v-model="forma.supervisor"
+            v-model="forma.supervisores"
             :options="opcoesSupervisor"
-            label="Supervisor"
-            hint="O técnico só verá e apontará as equipes desse supervisor"
+            label="Supervisores"
+            hint="O técnico verá e apontará equipes de todos os supervisores selecionados"
             filled
+            multiple
+            use-chips
           />
           <q-select
             v-if="forma.role === 'coordenador'"
-            v-model="forma.coordenador"
+            v-model="forma.coordenadores"
             :options="opcoesCoordenador"
-            label="Coordenador"
-            hint="O coordenador só verá e apontará as equipes desse coordenador"
+            label="Coordenadores"
+            hint="O coordenador verá e apontará equipes de todos os coordenadores selecionados"
             filled
+            multiple
+            use-chips
           />
           <q-input
             v-model="forma.senha"
@@ -107,6 +111,8 @@ interface Usuario {
   base_id: number | null;
   supervisor: string | null;
   coordenador: string | null;
+  supervisores: string[];
+  coordenadores: string[];
   ativo: boolean;
 }
 
@@ -127,8 +133,8 @@ const usuariosFiltrados = computed(() => {
     (u) =>
       u.nome.toLowerCase().includes(q) ||
       u.usuario.toLowerCase().includes(q) ||
-      (u.supervisor ?? '').toLowerCase().includes(q) ||
-      (u.coordenador ?? '').toLowerCase().includes(q) ||
+      u.supervisores?.some((s) => s.toLowerCase().includes(q)) ||
+      u.coordenadores?.some((c) => c.toLowerCase().includes(q)) ||
       u.role.toLowerCase().includes(q),
   );
 });
@@ -143,8 +149,8 @@ const forma = ref({
   nome: '',
   usuario: '',
   role: 'tecnico' as Role,
-  supervisor: null as string | null,
-  coordenador: null as string | null,
+  supervisores: [] as string[],
+  coordenadores: [] as string[],
   senha: '',
   ativo: true,
 });
@@ -153,8 +159,20 @@ const colunas: QTableColumn[] = [
   { name: 'nome', label: 'Nome', field: 'nome', align: 'left', sortable: true },
   { name: 'usuario', label: 'Usuário', field: 'usuario', align: 'left', sortable: true },
   { name: 'role', label: 'Perfil', field: 'role', align: 'left' },
-  { name: 'supervisor', label: 'Supervisor', field: 'supervisor', align: 'left', sortable: true },
-  { name: 'coordenador', label: 'Coordenador', field: 'coordenador', align: 'left', sortable: true },
+  {
+    name: 'supervisor',
+    label: 'Supervisores',
+    field: (row: Usuario) => row.supervisores?.join(', ') || row.supervisor || '-',
+    align: 'left',
+    sortable: true,
+  },
+  {
+    name: 'coordenador',
+    label: 'Coordenadores',
+    field: (row: Usuario) => row.coordenadores?.join(', ') || row.coordenador || '-',
+    align: 'left',
+    sortable: true,
+  },
   { name: 'ativo', label: 'Status', field: 'ativo', align: 'left' },
   { name: 'acoes', label: '', field: 'id', align: 'right' },
 ];
@@ -189,7 +207,7 @@ async function carregar() {
 function abrirNovo() {
   editando.value = null;
   mostrarSenha.value = false;
-  forma.value = { nome: '', usuario: '', role: 'tecnico', supervisor: null, coordenador: null, senha: '', ativo: true };
+  forma.value = { nome: '', usuario: '', role: 'tecnico', supervisores: [], coordenadores: [], senha: '', ativo: true };
   dialogoAberto.value = true;
 }
 
@@ -200,8 +218,8 @@ function abrirEdicao(usuario: Usuario) {
     nome: usuario.nome,
     usuario: usuario.usuario,
     role: usuario.role,
-    supervisor: usuario.supervisor,
-    coordenador: usuario.coordenador,
+    supervisores: usuario.supervisores?.length ? [...usuario.supervisores] : (usuario.supervisor ? [usuario.supervisor] : []),
+    coordenadores: usuario.coordenadores?.length ? [...usuario.coordenadores] : (usuario.coordenador ? [usuario.coordenador] : []),
     senha: '',
     ativo: usuario.ativo,
   };
@@ -209,12 +227,12 @@ function abrirEdicao(usuario: Usuario) {
 }
 
 async function salvar() {
-  if (forma.value.role === 'tecnico' && !forma.value.supervisor) {
-    $q.notify({ type: 'negative', message: 'Selecione o supervisor do técnico.' });
+  if (forma.value.role === 'tecnico' && forma.value.supervisores.length === 0) {
+    $q.notify({ type: 'negative', message: 'Selecione pelo menos um supervisor para o técnico.' });
     return;
   }
-  if (forma.value.role === 'coordenador' && !forma.value.coordenador) {
-    $q.notify({ type: 'negative', message: 'Selecione o coordenador.' });
+  if (forma.value.role === 'coordenador' && forma.value.coordenadores.length === 0) {
+    $q.notify({ type: 'negative', message: 'Selecione pelo menos um coordenador.' });
     return;
   }
 
@@ -224,8 +242,8 @@ async function salvar() {
       await api.put(`/usuarios/${editando.value.id}`, {
         nome: forma.value.nome,
         role: forma.value.role,
-        supervisor: forma.value.role === 'tecnico' ? forma.value.supervisor : null,
-        coordenador: forma.value.role === 'coordenador' ? forma.value.coordenador : null,
+        supervisores: forma.value.role === 'tecnico' ? forma.value.supervisores : [],
+        coordenadores: forma.value.role === 'coordenador' ? forma.value.coordenadores : [],
         ativo: forma.value.ativo,
         senha: forma.value.senha || undefined,
       });
@@ -235,8 +253,8 @@ async function salvar() {
         usuario: forma.value.usuario,
         senha: forma.value.senha,
         role: forma.value.role,
-        supervisor: forma.value.supervisor,
-        coordenador: forma.value.coordenador,
+        supervisores: forma.value.supervisores,
+        coordenadores: forma.value.coordenadores,
       });
     }
     dialogoAberto.value = false;

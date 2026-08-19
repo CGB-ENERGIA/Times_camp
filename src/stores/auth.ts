@@ -11,6 +11,8 @@ export interface Usuario {
   baseId: number | null;
   supervisor: string | null;
   coordenador: string | null;
+  supervisores: string[];
+  coordenadores: string[];
 }
 
 export const useAuthStore = defineStore('auth', {

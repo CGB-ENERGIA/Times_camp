@@ -89,6 +89,23 @@
             unelevated
             @click="aplicarLote"
           />
+          <q-separator vertical />
+          <q-btn
+            color="positive"
+            icon="check_circle"
+            label="Ativar"
+            :loading="alterandoStatus"
+            unelevated
+            @click="alterarStatusLote(true)"
+          />
+          <q-btn
+            color="negative"
+            icon="cancel"
+            label="Desativar"
+            :loading="alterandoStatus"
+            unelevated
+            @click="alterarStatusLote(false)"
+          />
           <q-btn flat label="Cancelar" @click="selecionadas = []" />
         </q-card-section>
       </q-card>
@@ -312,6 +329,7 @@ const selecionadas = ref<Equipe[]>([]);
 const loteSupervisor = ref('');
 const loteCoordenador = ref('');
 const aplicando = ref(false);
+const alterandoStatus = ref(false);
 const inputExcel = ref<HTMLInputElement | null>(null);
 const dialogoImport = ref(false);
 const linhasImport = ref<LinhaImport[]>([]);
@@ -443,6 +461,34 @@ async function aplicarLote() {
     $q.notify({ type: 'negative', message: 'Erro ao aplicar em lote.' });
   } finally {
     aplicando.value = false;
+  }
+}
+
+async function alterarStatusLote(ativo: boolean) {
+  alterandoStatus.value = true;
+  try {
+    await Promise.all(
+      selecionadas.value.map((eq) =>
+        api.put(`/equipes/${eq.id}`, {
+          tipo: eq.tipo,
+          identificador: eq.identificador,
+          horarioPadrao: eq.horario_padrao_saida.slice(0, 5),
+          supervisor: eq.supervisor,
+          coordenador: eq.coordenador,
+          ativo,
+        }),
+      ),
+    );
+    $q.notify({
+      type: 'positive',
+      message: `${selecionadas.value.length} equipe(s) ${ativo ? 'ativadas' : 'desativadas'}!`,
+    });
+    selecionadas.value = [];
+    await carregar();
+  } catch {
+    $q.notify({ type: 'negative', message: 'Erro ao alterar status.' });
+  } finally {
+    alterandoStatus.value = false;
   }
 }
 

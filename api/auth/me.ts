@@ -17,5 +17,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     baseId: session.baseId,
     supervisor: session.supervisor,
     coordenador: session.coordenador,
+    supervisores: session.supervisores ?? [],
+    coordenadores: session.coordenadores ?? [],
   });
 }

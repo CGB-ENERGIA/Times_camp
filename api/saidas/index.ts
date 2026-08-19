@@ -55,14 +55,20 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (session.role === 'tecnico' && (!session.supervisor || equipe.supervisor !== session.supervisor)) {
-      res.status(403).json({ error: 'Você só pode registrar saídas de equipes do seu supervisor' });
-      return;
+    if (session.role === 'tecnico') {
+      const supervisores = session.supervisores?.length ? session.supervisores : (session.supervisor ? [session.supervisor] : []);
+      if (!supervisores.includes(equipe.supervisor)) {
+        res.status(403).json({ error: 'Você só pode registrar saídas de equipes dos seus supervisores' });
+        return;
+      }
     }
 
-    if (session.role === 'coordenador' && (!session.coordenador || equipe.coordenador !== session.coordenador)) {
-      res.status(403).json({ error: 'Você só pode registrar saídas de equipes do seu coordenador' });
-      return;
+    if (session.role === 'coordenador') {
+      const coordenadores = session.coordenadores?.length ? session.coordenadores : (session.coordenador ? [session.coordenador] : []);
+      if (!coordenadores.includes(equipe.coordenador)) {
+        res.status(403).json({ error: 'Você só pode registrar saídas de equipes dos seus coordenadores' });
+        return;
+      }
     }
 
     const [registro] = await sql`

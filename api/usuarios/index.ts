@@ -11,7 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     const usuarios = await sql`
-      select id, nome, usuario, role, base_id, supervisor, coordenador, ativo, created_at
+      select id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, ativo, created_at
       from usuarios
       order by nome
     `;
@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { nome, usuario, senha, role, supervisor, coordenador } = req.body || {};
+    const { nome, usuario, senha, role, supervisores, coordenadores } = req.body || {};
     if (!nome || !usuario || !senha || !role) {
       res.status(400).json({ error: 'Informe nome, usuário, senha e perfil' });
       return;
@@ -29,27 +29,33 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(400).json({ error: `Perfil inválido. Use um de: ${ROLES.join(', ')}` });
       return;
     }
-    if (role === 'tecnico' && !supervisor) {
-      res.status(400).json({ error: 'Técnico precisa estar vinculado a um supervisor' });
+    const supervisoresArr: string[] = Array.isArray(supervisores) ? supervisores : [];
+    const coordenadoresArr: string[] = Array.isArray(coordenadores) ? coordenadores : [];
+    if (role === 'tecnico' && supervisoresArr.length === 0) {
+      res.status(400).json({ error: 'Técnico precisa estar vinculado a pelo menos um supervisor' });
       return;
     }
-    if (role === 'coordenador' && !coordenador) {
-      res.status(400).json({ error: 'Coordenador precisa estar vinculado a um coordenador' });
+    if (role === 'coordenador' && coordenadoresArr.length === 0) {
+      res.status(400).json({ error: 'Coordenador precisa estar vinculado a pelo menos um coordenador' });
       return;
     }
+    const supervisorPrimario = supervisoresArr[0] ?? null;
+    const coordenadorPrimario = coordenadoresArr[0] ?? null;
 
     const senhaHash = await hashPassword(senha);
 
     try {
       const [novo] = await sql`
-        insert into usuarios (nome, usuario, senha_hash, role, supervisor, coordenador, ativo)
+        insert into usuarios (nome, usuario, senha_hash, role, supervisor, coordenador, supervisores, coordenadores, ativo)
         values (
           ${nome}, ${usuario}, ${senhaHash}, ${role},
-          ${role === 'tecnico' ? supervisor : null},
-          ${role === 'coordenador' ? coordenador : null},
+          ${role === 'tecnico' ? supervisorPrimario : null},
+          ${role === 'coordenador' ? coordenadorPrimario : null},
+          ${role === 'tecnico' ? supervisoresArr : sql`'{}'::text[]`},
+          ${role === 'coordenador' ? coordenadoresArr : sql`'{}'::text[]`},
           true
         )
-        returning id, nome, usuario, role, base_id, supervisor, coordenador, ativo, created_at
+        returning id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, ativo, created_at
       `;
       res.status(201).json(novo);
     } catch (err) {
