@@ -8,18 +8,29 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!session) return;
 
     const data = (req.query.data as string) || null;
-    if (!data) {
-      res.status(400).json({ error: 'Informe a data' });
+    const dataInicio = (req.query.dataInicio as string) || null;
+    const dataFim = (req.query.dataFim as string) || null;
+
+    if (!data && !dataInicio) {
+      res.status(400).json({ error: 'Informe a data ou dataInicio' });
       return;
     }
 
-    const rows = await sql`
-      select j.id, j.equipe_id, j.data, j.tipo, j.motivo, u.nome as registrado_por_nome, j.updated_at
-      from justificativas j
-      join usuarios u on u.id = j.registrado_por
-      where j.data = ${data}
-      order by j.updated_at desc
-    `;
+    const rows = dataInicio
+      ? await sql`
+          select j.id, j.equipe_id, j.data, j.tipo, j.motivo, u.nome as registrado_por_nome, j.updated_at
+          from justificativas j
+          join usuarios u on u.id = j.registrado_por
+          where j.data >= ${dataInicio} and j.data <= ${dataFim ?? dataInicio}
+          order by j.data desc, j.updated_at desc
+        `
+      : await sql`
+          select j.id, j.equipe_id, j.data, j.tipo, j.motivo, u.nome as registrado_por_nome, j.updated_at
+          from justificativas j
+          join usuarios u on u.id = j.registrado_por
+          where j.data = ${data}
+          order by j.updated_at desc
+        `;
     res.status(200).json(rows);
     return;
   }

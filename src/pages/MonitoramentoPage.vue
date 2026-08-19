@@ -99,6 +99,13 @@
         />
 
         <q-btn v-if="temFiltroAtivo" flat dense label="Limpar filtros" @click="limparFiltros" />
+        <q-btn
+          flat dense round icon="share"
+          :loading="exportandoPendentes"
+          @click="exportarPendentes"
+        >
+          <q-tooltip>Baixar imagem dos pendentes para WhatsApp</q-tooltip>
+        </q-btn>
       </div>
 
       <q-card flat bordered class="q-mb-md" ref="graficoCardEl">
@@ -202,10 +209,14 @@
       </q-card>
 
       <!-- Gráfico: média de saída por base -->
-      <q-card flat bordered class="q-mb-md">
+      <q-card flat bordered class="q-mb-md" ref="mediaCardEl">
         <q-card-section class="row items-center q-gutter-sm">
           <div class="text-subtitle2">Média de saída por base</div>
           <div class="text-caption text-grey-6">{{ data }} · apenas equipes com saída registrada</div>
+          <q-space />
+          <q-btn flat dense round icon="ios_share" :loading="exportandoMedia" @click="exportarMedia">
+            <q-tooltip>Baixar imagem para WhatsApp</q-tooltip>
+          </q-btn>
         </q-card-section>
         <q-separator />
         <q-card-section>
@@ -247,6 +258,84 @@
                 <span v-if="eq.atrasoMin" class="equipe-chip-atraso">+{{ eq.atrasoMin }}m</span>
               </div>
             </div>
+          </div>
+        </q-card-section>
+      </q-card>
+
+      <!-- Mapa histórico de saídas (equipes × dias) -->
+      <q-card flat bordered class="q-mb-md" ref="mapaCardEl">
+        <q-card-section class="row items-center q-gutter-sm">
+          <div class="text-subtitle2">Mapa histórico de saídas</div>
+          <q-space />
+          <q-btn-toggle
+            v-model="diasMapa"
+            dense no-caps unelevated
+            toggle-color="primary"
+            color="grey-9"
+            text-color="white"
+            :options="[
+              { label: '7d', value: 7 },
+              { label: '14d', value: 14 },
+              { label: '30d', value: 30 },
+            ]"
+            @update:model-value="carregarMapa"
+          />
+          <q-btn flat dense round icon="refresh" :loading="carregandoMapa" @click="carregarMapa">
+            <q-tooltip>Recarregar mapa</q-tooltip>
+          </q-btn>
+          <q-btn flat dense round icon="ios_share" :loading="exportandoMapa" @click="exportarMapa">
+            <q-tooltip>Baixar imagem para WhatsApp</q-tooltip>
+          </q-btn>
+        </q-card-section>
+        <q-separator />
+        <q-card-section class="q-pa-sm">
+          <div v-if="carregandoMapa" class="text-center q-pa-lg">
+            <q-spinner color="primary" size="32px" />
+          </div>
+          <div v-else-if="!mapaCarregado" class="text-grey-6 text-center q-pa-lg">
+            Selecione o período e clique em <q-icon name="refresh" /> para carregar o mapa.
+          </div>
+          <div v-else-if="mapaGrid.length === 0" class="text-grey-6 text-center q-pa-lg">
+            Nenhum dado com os filtros atuais.
+          </div>
+          <div v-else class="mapa-wrap">
+            <table class="mapa-table">
+              <thead>
+                <tr>
+                  <th class="mapa-prefixo-th">Prefixo</th>
+                  <th
+                    v-for="dia in datasMapaRange"
+                    :key="dia"
+                    class="mapa-dia-th"
+                    :title="dia"
+                  >{{ diaLabel(dia) }}</th>
+                </tr>
+              </thead>
+              <tbody>
+                <tr v-for="row in mapaGrid" :key="row.equipeId">
+                  <td class="mapa-prefixo-cell">{{ row.identificador }}</td>
+                  <td
+                    v-for="(cel, i) in row.celulas"
+                    :key="i"
+                    class="mapa-celula"
+                    :class="`mapa-status-${cel.status}`"
+                  >
+                    <span v-if="cel.status === 'ausente'" class="mapa-ausente-txt">AUS</span>
+                    <span v-else-if="cel.hora">{{ cel.hora }}</span>
+                  </td>
+                </tr>
+              </tbody>
+            </table>
+          </div>
+        </q-card-section>
+        <q-card-section v-if="mapaCarregado && !carregandoMapa" class="q-pt-none">
+          <div class="row q-gutter-sm items-center text-caption text-grey-6">
+            <span><span class="mapa-legenda-dot" style="background:#0ca30c" /> No prazo</span>
+            <span><span class="mapa-legenda-dot" style="background:#d03b3b" /> Atrasado</span>
+            <span><span class="mapa-legenda-dot" style="background:#e65100" /> Ausente (FALTA)</span>
+            <span><span class="mapa-legenda-dot" style="background:rgba(128,128,128,0.15);border:1px solid #ccc" /> Sem registro</span>
+            <q-space />
+            <span class="text-grey-6">{{ datasMapaRange[0] }} → {{ datasMapaRange[datasMapaRange.length - 1] }}</span>
           </div>
         </q-card-section>
       </q-card>
@@ -356,6 +445,11 @@ const conteudoEl = ref<HTMLElement | null>(null);
 const graficoSecaoEl = ref<{ $el: HTMLElement } | null>(null);
 const graficoCardEl = ref<{ $el: HTMLElement } | null>(null);
 const exportando = ref(false);
+const mediaCardEl = ref<{ $el: HTMLElement } | null>(null);
+const mapaCardEl = ref<{ $el: HTMLElement } | null>(null);
+const exportandoMedia = ref(false);
+const exportandoMapa = ref(false);
+const exportandoPendentes = ref(false);
 
 const busca = ref('');
 const baseFiltro = ref<number[]>([]);
@@ -364,6 +458,84 @@ const supervisorFiltro = ref<string[]>([]);
 const coordenadorFiltro = ref<string[]>([]);
 const statusFiltro = ref<Status[]>([]);
 const visaoGrafico = ref<'base' | 'atraso' | 'heatmap'>('base');
+
+// ---- Mapa histórico ----
+interface SaidaMapa { equipe_id: number; data: string; hora_saida: string }
+interface JustMapa { equipe_id: number; data: string; tipo: string }
+const diasMapa = ref<7 | 14 | 30>(7);
+const saidasMapa = ref<SaidaMapa[]>([]);
+const justMapa = ref<JustMapa[]>([]);
+const carregandoMapa = ref(false);
+const mapaCarregado = ref(false);
+
+const datasMapaRange = computed<string[]>(() => {
+  const dias: string[] = [];
+  for (let i = diasMapa.value - 1; i >= 0; i--) {
+    const d = new Date();
+    d.setDate(d.getDate() - i);
+    dias.push(d.toISOString().slice(0, 10));
+  }
+  return dias;
+});
+
+function diaLabel(iso: string): string {
+  // "YYYY-MM-DD" → "DD/MM"
+  return `${iso.slice(8)}/${iso.slice(5, 7)}`;
+}
+
+type CelulaStatus = 'no_prazo' | 'atrasado' | 'ausente' | 'vazio';
+interface CelulaMapa { hora: string | null; status: CelulaStatus }
+interface LinhaMapa extends Row { celulas: CelulaMapa[] }
+
+const mapaGrid = computed<LinhaMapa[]>(() => {
+  if (!mapaCarregado.value) return [];
+  const dias = datasMapaRange.value;
+  const saidaMap = new Map<string, string>();
+  const justMap = new Map<string, string>();
+  for (const s of saidasMapa.value) {
+    saidaMap.set(`${s.equipe_id}-${s.data}`, s.hora_saida);
+  }
+  for (const j of justMapa.value) {
+    const k = `${j.equipe_id}-${j.data}`;
+    if (!justMap.has(k)) justMap.set(k, j.tipo);
+  }
+  return rowsFiltradas.value.map((eq) => ({
+    ...eq,
+    celulas: dias.map((dia) => {
+      const hora = saidaMap.get(`${eq.equipeId}-${dia}`) ?? null;
+      const just = justMap.get(`${eq.equipeId}-${dia}`) ?? null;
+      let status: CelulaStatus;
+      if (hora) {
+        status = toMinutos(hora) <= toMinutos(eq.horarioPadrao) ? 'no_prazo' : 'atrasado';
+      } else if (just === 'FALTA') {
+        status = 'ausente';
+      } else {
+        status = 'vazio';
+      }
+      return { hora: hora ? hora.slice(0, 5) : null, status };
+    }),
+  }));
+});
+
+async function carregarMapa() {
+  if (carregandoMapa.value) return;
+  carregandoMapa.value = true;
+  try {
+    const dataInicio = datasMapaRange.value[0];
+    const dataFim = datasMapaRange.value[datasMapaRange.value.length - 1];
+    const [{ data: saidas }, { data: justs }] = await Promise.all([
+      api.get<SaidaMapa[]>('/saidas', { params: { dataInicio, dataFim, limit: 10000 } }),
+      api.get<JustMapa[]>('/justificativas', { params: { dataInicio, dataFim } }),
+    ]);
+    saidasMapa.value = saidas;
+    justMapa.value = justs;
+    mapaCarregado.value = true;
+  } catch {
+    $q.notify({ type: 'negative', message: 'Erro ao carregar mapa histórico' });
+  } finally {
+    carregandoMapa.value = false;
+  }
+}
 
 const tituloGrafico = computed(
   () =>
@@ -726,6 +898,90 @@ function corCelulaHeatmap(contagem: number): string {
   return `rgba(25, 118, 210, ${intensidade.toFixed(2)})`;
 }
 
+async function capturarEl(el: HTMLElement, nomeArquivo: string) {
+  const corFundo = getComputedStyle(el).backgroundColor || '#ffffff';
+  const canvas = await html2canvas(el, { backgroundColor: corFundo, scale: 2, useCORS: true });
+  const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = nomeArquivo;
+  link.click();
+  URL.revokeObjectURL(url);
+}
+
+async function exportarMedia() {
+  const cardEl = mediaCardEl.value?.$el;
+  if (!cardEl || exportandoMedia.value) return;
+  exportandoMedia.value = true;
+  try {
+    await nextTick();
+    await capturarEl(cardEl, `media-saida-${data.value}.png`);
+  } finally {
+    exportandoMedia.value = false;
+  }
+}
+
+async function exportarMapa() {
+  const cardEl = mapaCardEl.value?.$el;
+  if (!cardEl || exportandoMapa.value || !mapaCarregado.value) return;
+  exportandoMapa.value = true;
+  try {
+    await nextTick();
+    const ini = datasMapaRange.value[0];
+    const fim = datasMapaRange.value[datasMapaRange.value.length - 1];
+    await capturarEl(cardEl, `mapa-historico-${ini}-a-${fim}.png`);
+  } finally {
+    exportandoMapa.value = false;
+  }
+}
+
+async function exportarPendentes() {
+  if (exportandoPendentes.value) return;
+  const pendentes = rowsFiltradas.value.filter((r) => r.status === 'pendente');
+  if (!pendentes.length) {
+    $q.notify({ type: 'info', message: 'Nenhuma equipe pendente com os filtros atuais' });
+    return;
+  }
+  exportandoPendentes.value = true;
+  try {
+    const div = document.createElement('div');
+    div.style.cssText =
+      'position:fixed;top:-9999px;left:-9999px;width:720px;padding:24px 28px;background:#fff;font-family:Arial,sans-serif;';
+
+    const baseNomes = [...new Set(pendentes.map((r) => r.baseNome))].sort();
+    div.innerHTML = `
+      <div style="font-size:20px;font-weight:700;color:#1565c0;margin-bottom:2px;">CGB ENERGIA</div>
+      <div style="font-size:15px;font-weight:600;color:#333;margin-bottom:2px;">Equipes pendentes de apontamento</div>
+      <div style="font-size:13px;color:#666;margin-bottom:16px;">${data.value} · ${pendentes.length} equipe(s)</div>
+      ${baseNomes
+        .map(
+          (b) => `
+        <div style="margin-bottom:12px;">
+          <div style="font-size:12px;font-weight:700;color:#555;border-bottom:1px solid #eee;padding-bottom:4px;margin-bottom:6px;">${b}</div>
+          <div style="display:flex;flex-wrap:wrap;gap:6px;">
+            ${pendentes
+              .filter((r) => r.baseNome === b)
+              .map(
+                (r) =>
+                  `<span style="padding:4px 10px;background:#757575;color:#fff;border-radius:6px;font-size:12px;font-weight:600;">${r.identificador}</span>`,
+              )
+              .join('')}
+          </div>
+        </div>`,
+        )
+        .join('')}
+    `;
+    document.body.appendChild(div);
+    await nextTick();
+    await capturarEl(div, `pendentes-${data.value}.png`);
+    document.body.removeChild(div);
+  } finally {
+    exportandoPendentes.value = false;
+  }
+}
+
 async function exportarGrafico() {
   const cardEl = graficoCardEl.value?.$el;
   if (!cardEl || exportando.value) return;
@@ -892,5 +1148,88 @@ onUnmounted(() => {
   box-shadow: inset 0 0 0 2px var(--q-negative);
   vertical-align: middle;
   margin-right: 2px;
+}
+
+/* ---- Mapa histórico ---- */
+.mapa-wrap {
+  overflow-x: auto;
+}
+
+.mapa-table {
+  border-collapse: collapse;
+  font-size: 0.72rem;
+  white-space: nowrap;
+}
+
+.mapa-table th,
+.mapa-table td {
+  border: 1px solid rgba(128, 128, 128, 0.2);
+  text-align: center;
+  padding: 3px 5px;
+}
+
+.mapa-prefixo-th {
+  text-align: left;
+  min-width: 130px;
+  font-size: 0.72rem;
+  font-weight: 600;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.mapa-prefixo-cell {
+  text-align: left;
+  min-width: 130px;
+  font-weight: 600;
+  font-size: 0.72rem;
+  position: sticky;
+  left: 0;
+  z-index: 1;
+}
+
+.mapa-dia-th {
+  min-width: 52px;
+  font-size: 0.68rem;
+}
+
+.mapa-celula {
+  min-width: 52px;
+  font-weight: 600;
+  font-size: 0.7rem;
+}
+
+.mapa-status-no_prazo {
+  background: #0ca30c;
+  color: #fff;
+}
+
+.mapa-status-atrasado {
+  background: #d03b3b;
+  color: #fff;
+}
+
+.mapa-status-ausente {
+  background: #e65100;
+  color: #fff;
+}
+
+.mapa-status-vazio {
+  color: rgba(128, 128, 128, 0.4);
+}
+
+.mapa-ausente-txt {
+  font-size: 0.58rem;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.mapa-legenda-dot {
+  display: inline-block;
+  width: 12px;
+  height: 12px;
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 3px;
 }
 </style>
