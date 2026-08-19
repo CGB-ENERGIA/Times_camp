@@ -1074,8 +1074,8 @@ async function exportarResumo() {
     ctx.fillStyle = '#f59e0b';
     ctx.fillRect(0, H_HEADER - 5, W, 5);
 
-    // Logo — escala proporcional (object-fit: contain) dentro de caixa LS×LS
-    const LS = 64;
+    // Logo — sem box nem clip; transparência da logo mostra o gradiente atrás
+    const LS = 82;
     const LY = (H_HEADER - 5 - LS) / 2;
     if (logo) {
       const nw = logo.naturalWidth || logo.width;
@@ -1083,31 +1083,17 @@ async function exportarResumo() {
       const logoScale = Math.min(LS / nw, LS / nh);
       const dw = nw * logoScale;
       const dh = nh * logoScale;
-      const dx = PAD + (LS - dw) / 2;   // centraliza horizontalmente
-      const dy = LY + (LS - dh) / 2;    // centraliza verticalmente
+      const dx = PAD + (LS - dw) / 2;
+      const dy = LY + (LS - dh) / 2;
 
-      // fundo suave atrás da logo
       ctx.save();
-      ctx.shadowColor = 'rgba(0,0,0,0.45)';
-      ctx.shadowBlur = 12;
-      rr(PAD, LY, LS, LS, 12);
-      ctx.fillStyle = 'rgba(255,255,255,0.08)';
-      ctx.fill();
-      ctx.restore();
-
-      // logo com clip arredondado, sem esticar
-      ctx.save();
-      rr(PAD, LY, LS, LS, 12);
-      ctx.clip();
+      ctx.imageSmoothingEnabled = true;
+      ctx.imageSmoothingQuality = 'high';
+      ctx.shadowColor = 'rgba(0,0,0,0.55)';
+      ctx.shadowBlur = 18;
+      ctx.shadowOffsetX = 1;
+      ctx.shadowOffsetY = 2;
       ctx.drawImage(logo, dx, dy, dw, dh);
-      ctx.restore();
-
-      // anel sutil
-      ctx.save();
-      ctx.strokeStyle = 'rgba(255,255,255,0.28)';
-      ctx.lineWidth = 1.5;
-      rr(PAD, LY, LS, LS, 12);
-      ctx.stroke();
       ctx.restore();
     }
 
