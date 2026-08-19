@@ -222,15 +222,17 @@
           <div class="text-subtitle1">{{ editando ? 'Editar equipe' : 'Nova equipe' }}</div>
         </q-card-section>
         <q-card-section class="q-gutter-md">
-          <q-select v-model="forma.baseId" :options="opcoesBase" emit-value map-options label="Base" filled :disable="!!editando" />
+          <q-select v-model="forma.baseId" :options="opcoesBase" emit-value map-options label="Base" filled />
           <q-select v-model="forma.tipo" :options="tipos" label="Tipo" filled />
-          <q-input v-model="forma.identificador" label="Nome da equipe" filled :disable="!!editando" />
+          <q-input v-model="forma.identificador" label="Nome da equipe" filled />
           <q-input v-model="forma.horarioPadrao" label="Horário de saída padrão" type="time" filled />
           <q-input v-model="forma.supervisor" label="Supervisor" filled />
           <q-input v-model="forma.coordenador" label="Coordenador" filled />
           <q-toggle v-if="editando" v-model="forma.ativo" label="Ativa" />
         </q-card-section>
         <q-card-actions align="right">
+          <q-btn v-if="editando" flat color="negative" icon="delete" label="Excluir" @click="excluir" />
+          <q-space />
           <q-btn flat label="Cancelar" v-close-popup />
           <q-btn color="primary" label="Salvar" :loading="salvando" @click="salvar" />
         </q-card-actions>
@@ -654,6 +656,7 @@ async function salvar() {
   try {
     if (editando.value) {
       await api.put(`/equipes/${editando.value.id}`, {
+        baseId: forma.value.baseId,
         tipo: forma.value.tipo,
         identificador: forma.value.identificador,
         horarioPadrao: forma.value.horarioPadrao,
@@ -676,6 +679,27 @@ async function salvar() {
   } finally {
     salvando.value = false;
   }
+}
+
+async function excluir() {
+  if (!editando.value) return;
+  $q.dialog({
+    title: 'Excluir equipe',
+    message: `Tem certeza que deseja excluir "${editando.value.identificador}"? Esta ação não pode ser desfeita.`,
+    cancel: true,
+    persistent: true,
+    ok: { label: 'Excluir', color: 'negative', flat: true },
+  }).onOk(async () => {
+    try {
+      await api.delete(`/equipes/${editando.value!.id}`);
+      dialogoAberto.value = false;
+      $q.notify({ type: 'positive', message: 'Equipe excluída.' });
+      await carregar();
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
+      $q.notify({ type: 'negative', message: msg || 'Erro ao excluir equipe.' });
+    }
+  });
 }
 
 onMounted(async () => {
