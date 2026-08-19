@@ -984,121 +984,308 @@ async function exportarResumo() {
   try {
     const linhas = rowsFiltradas.value;
     const pendentes = linhas.filter((r) => r.status === 'pendente');
+    const noPrazoCount = linhas.filter((r) => r.status === 'no_prazo').length;
+    const atrasadoCount = linhas.filter((r) => r.status === 'atrasado').length;
     const baseNomes = [...new Set(linhas.map((r) => r.baseNome))].sort();
+    const basesComMedia = baseNomes.filter((b) => linhas.some((r) => r.baseNome === b && r.horaSaida));
+    const pendentesBases = baseNomes.filter((b) => pendentes.some((r) => r.baseNome === b));
 
-    // ---- construir o HTML off-screen ----
-    const W = 820;
+    // --- carrega logo ---
+    const logo = await new Promise<HTMLImageElement | null>((resolve) => {
+      const img = new Image();
+      img.onload = () => resolve(img);
+      img.onerror = () => resolve(null);
+      img.src = '/icons/favicon-128x128.png';
+    });
+
+    // --- constantes de layout ---
+    const SCALE = 2;
+    const W = 860;
     const PAD = 28;
-    const innerW = W - PAD * 2;
+    const IW = W - PAD * 2;
+    const CARDS_PER_ROW = 3;
+    const CARD_H = 80;
+    const CARD_GAP = 10;
+    const BAR_ITEM_H = 32;
+    const SEC_H = 40;
 
-    function chip(text: string, bg: string, color = '#fff', extra = '') {
-      return `<span style="display:inline-block;padding:3px 10px;background:${bg};color:${color};border-radius:5px;font-size:11px;font-weight:700;margin:2px;${extra}">${text}</span>`;
+    // calcula altura total
+    const H_HEADER = 106;
+    const H_STATS = 62;
+    const H_STATUS = SEC_H + baseNomes.length * BAR_ITEM_H + 28;
+    const H_MEDIA = SEC_H + Math.ceil(basesComMedia.length / CARDS_PER_ROW) * (CARD_H + CARD_GAP) + 12;
+    let H_PEND = SEC_H + (pendentes.length === 0 ? 36 : 0);
+    if (pendentes.length > 0) {
+      for (const b of pendentesBases) {
+        const cnt = pendentes.filter((r) => r.baseNome === b).length;
+        H_PEND += 22 + Math.ceil(cnt / 9) * 28 + 8;
+      }
+    }
+    const H_FOOTER = 38;
+    const TOTAL_H = H_HEADER + H_STATS + PAD + H_STATUS + 20 + H_MEDIA + 20 + H_PEND + PAD + H_FOOTER;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W * SCALE;
+    canvas.height = TOTAL_H * SCALE;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(SCALE, SCALE);
+
+    // --- helpers ---
+    function rr(x: number, y: number, w: number, h: number, r = 6) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y);
+      ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y, x + w, y + r, r);
+      ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r);
+      ctx.lineTo(x + r, y + h);
+      ctx.arcTo(x, y + h, x, y + h - r, r);
+      ctx.lineTo(x, y + r);
+      ctx.arcTo(x, y, x + r, y, r);
+      ctx.closePath();
     }
 
-    function sectionTitle(t: string) {
-      return `<div style="font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#888;border-bottom:1px solid #eee;padding-bottom:6px;margin:18px 0 10px;">${t}</div>`;
+    function txt(
+      s: string, x: number, y: number,
+      font = '12px Arial', color = '#1c1c2e',
+      align: CanvasTextAlign = 'left', maxW?: number,
+    ) {
+      ctx.save();
+      ctx.font = font;
+      ctx.fillStyle = color;
+      ctx.textAlign = align;
+      ctx.textBaseline = 'alphabetic';
+      maxW !== undefined ? ctx.fillText(s, x, y, maxW) : ctx.fillText(s, x, y);
+      ctx.restore();
     }
 
-    // Status por base — barras horizontais
-    const statusSection = baseNomes.map((b) => {
+    // === FUNDO BRANCO ===
+    ctx.fillStyle = '#fff';
+    ctx.fillRect(0, 0, W, TOTAL_H);
+
+    // === HEADER — gradiente azul escuro ===
+    const hGrad = ctx.createLinearGradient(0, 0, W, H_HEADER);
+    hGrad.addColorStop(0, '#16387a');
+    hGrad.addColorStop(1, '#091628');
+    ctx.fillStyle = hGrad;
+    ctx.fillRect(0, 0, W, H_HEADER);
+
+    // Faixa âmbar no rodapé do header
+    ctx.fillStyle = '#f59e0b';
+    ctx.fillRect(0, H_HEADER - 5, W, 5);
+
+    // Logo
+    const LS = 64;
+    const LY = (H_HEADER - 5 - LS) / 2;
+    if (logo) {
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.5)';
+      ctx.shadowBlur = 12;
+      rr(PAD, LY, LS, LS, 12);
+      ctx.fillStyle = 'rgba(255,255,255,0.08)';
+      ctx.fill();
+      ctx.restore();
+      ctx.save();
+      rr(PAD, LY, LS, LS, 12);
+      ctx.clip();
+      ctx.drawImage(logo, PAD, LY, LS, LS);
+      ctx.restore();
+      // anel sutil ao redor da logo
+      ctx.save();
+      ctx.strokeStyle = 'rgba(255,255,255,0.3)';
+      ctx.lineWidth = 1.5;
+      rr(PAD, LY, LS, LS, 12);
+      ctx.stroke();
+      ctx.restore();
+    }
+
+    const TX = PAD + (logo ? LS + 18 : 0);
+    txt('CGB ENERGIA', TX, H_HEADER / 2 - 5, 'bold 28px Arial', '#ffffff');
+    txt('Monitoramento de Saídas de Campo', TX, H_HEADER / 2 + 22, '13px Arial', 'rgba(255,255,255,0.6)');
+    txt(data.value, W - PAD, 34, 'bold 13px Arial', 'rgba(255,255,255,0.55)', 'right');
+
+    let y = H_HEADER;
+
+    // === BARRA DE STATS ===
+    ctx.fillStyle = '#1565c0';
+    ctx.fillRect(0, y, W, H_STATS);
+
+    const sstats = [
+      { n: noPrazoCount,         label: 'No prazo',  color: '#6effa0' },
+      { n: atrasadoCount,        label: 'Atrasadas', color: '#ff8a8a' },
+      { n: pendentes.length,     label: 'Pendentes', color: '#ffd97a' },
+      { n: linhas.length,        label: 'Total',     color: 'rgba(255,255,255,0.85)' },
+    ];
+    const scw = W / sstats.length;
+    sstats.forEach((s, i) => {
+      const cx = scw * i + scw / 2;
+      if (i > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.12)';
+        ctx.fillRect(scw * i, y + 10, 1, H_STATS - 20);
+      }
+      txt(String(s.n), cx, y + 32, 'bold 26px Arial', s.color, 'center');
+      txt(s.label, cx, y + 52, '11px Arial', 'rgba(255,255,255,0.6)', 'center');
+    });
+
+    y += H_STATS + PAD;
+
+    // helper de título de seção
+    function secTitle(label: string) {
+      ctx.fillStyle = '#1565c0';
+      ctx.fillRect(PAD, y, 4, 22);
+      txt(label, PAD + 12, y + 16, 'bold 11px Arial', '#374151');
+      y += SEC_H;
+    }
+
+    // === STATUS POR BASE ===
+    secTitle('STATUS POR BASE');
+
+    const LBL_W = 155;
+    const CNT_W = 36;
+    const BX = PAD + LBL_W + 10;
+    const BW = IW - LBL_W - CNT_W - 18;
+    const BH = 22;
+
+    for (const b of baseNomes) {
       const eqs = linhas.filter((r) => r.baseNome === b);
       const total = eqs.length;
-      if (!total) return '';
+      if (!total) continue;
       const np = eqs.filter((r) => r.status === 'no_prazo').length;
       const at = eqs.filter((r) => r.status === 'atrasado').length;
       const pe = eqs.filter((r) => r.status === 'pendente').length;
-      const barW = innerW - 160;
-      const npW = Math.round((np / total) * barW);
-      const atW = Math.round((at / total) * barW);
-      const peW = barW - npW - atW;
-      return `
-        <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;">
-          <div style="width:150px;font-size:12px;font-weight:600;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b}</div>
-          <div style="display:flex;height:22px;border-radius:4px;overflow:hidden;flex:1;">
-            ${np > 0 ? `<div style="width:${npW}px;background:#0ca30c;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">${np}</div>` : ''}
-            ${at > 0 ? `<div style="width:${atW}px;background:#d03b3b;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">${at}</div>` : ''}
-            ${pe > 0 ? `<div style="width:${peW}px;background:#bdbdbd;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;">${pe}</div>` : ''}
-          </div>
-          <div style="font-size:11px;color:#888;width:30px;text-align:right;">${total}</div>
-        </div>`;
-    }).join('');
+      const barY = y + 5;
 
-    // Média por base — cards em grid
-    const mediaSection = (() => {
-      const cards = baseNomes.map((b) => {
-        const saidas = linhas.filter((r) => r.baseNome === b && r.horaSaida);
-        if (!saidas.length) return '';
-        const media = Math.round(saidas.reduce((acc, r) => acc + toMinutos(r.horaSaida!), 0) / saidas.length);
-        const hora = formatarMinutos(media);
-        const ok = media <= 510;
-        const bg = ok ? '#e8f5e9' : '#ffebee';
-        const cor = ok ? '#0ca30c' : '#d03b3b';
-        return `<div style="padding:10px 14px;background:${bg};border-radius:6px;border-left:3px solid ${cor};min-width:160px;">
-          <div style="font-size:22px;font-weight:700;color:${cor};">${hora}</div>
-          <div style="font-size:11px;font-weight:600;color:#333;margin-top:2px;">${b}</div>
-          <div style="font-size:10px;color:#888;">${saidas.length} equipe${saidas.length !== 1 ? 's' : ''}</div>
-        </div>`;
-      }).filter(Boolean).join('');
-      return `<div style="display:flex;flex-wrap:wrap;gap:8px;">${cards}</div>`;
-    })();
+      txt(b, PAD, y + BH, '12px Arial', '#1c1c2e', 'left', LBL_W - 4);
 
-    // Pendentes — chips por base
-    const pendentesBases = baseNomes.filter((b) => pendentes.some((r) => r.baseNome === b));
-    const pendentesSection = pendentes.length === 0
-      ? `<div style="color:#0ca30c;font-size:13px;font-weight:600;">✓ Todas as equipes já apontaram!</div>`
-      : pendentesBases.map((b) => {
-          const eqs = pendentes.filter((r) => r.baseNome === b);
-          return `<div style="margin-bottom:8px;">
-            <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:3px;">${b.toUpperCase()}</div>
-            <div>${eqs.map((r) => chip(r.identificador, '#757575')).join('')}</div>
-          </div>`;
-        }).join('');
+      // segmentos com clip rounded
+      ctx.save();
+      rr(BX, barY, BW, BH, 5);
+      ctx.fillStyle = '#e5e7eb';
+      ctx.fill();
+      ctx.clip();
+      let sx = BX;
+      for (const [cnt, col] of [[np, '#0ca30c'], [at, '#d03b3b'], [pe, '#9e9e9e']] as [number, string][]) {
+        if (!cnt) continue;
+        const sw = Math.round((cnt / total) * BW);
+        ctx.fillStyle = col;
+        ctx.fillRect(sx, barY, sw, BH);
+        if (sw > 24) txt(String(cnt), sx + sw / 2, barY + 15, 'bold 10px Arial', '#fff', 'center');
+        sx += sw;
+      }
+      ctx.restore();
 
-    // Legenda de status
-    const legenda = `<div style="display:flex;gap:14px;font-size:10px;color:#888;margin-top:6px;">
-      ${chip('No prazo', '#0ca30c', '#fff', 'font-size:10px;')}
-      ${chip('Atrasado', '#d03b3b', '#fff', 'font-size:10px;')}
-      ${chip('Pendente', '#bdbdbd', '#fff', 'font-size:10px;')}
-    </div>`;
+      txt(String(total), W - PAD, y + BH, 'bold 11px Arial', '#9ca3af', 'right');
+      y += BAR_ITEM_H;
+    }
 
-    const html = `
-      <div style="width:${W}px;padding:${PAD}px;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#333;box-sizing:border-box;">
-        <div style="border-bottom:3px solid #1565c0;padding-bottom:12px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:flex-end;">
-          <div>
-            <div style="font-size:22px;font-weight:700;color:#1565c0;">CGB ENERGIA</div>
-            <div style="font-size:13px;color:#666;margin-top:2px;">Resumo de saídas — ${data.value}</div>
-          </div>
-          <div style="text-align:right;font-size:11px;color:#888;">
-            <div>${linhas.length} equipes monitoradas</div>
-            <div>${pendentes.length} pendente${pendentes.length !== 1 ? 's' : ''} · ${linhas.filter(r => r.status === 'no_prazo').length} no prazo · ${linhas.filter(r => r.status === 'atrasado').length} atrasada${linhas.filter(r => r.status === 'atrasado').length !== 1 ? 's' : ''}</div>
-          </div>
-        </div>
-        ${sectionTitle('Status por base')}
-        ${statusSection}
-        ${legenda}
-        ${sectionTitle('Média de saída por base')}
-        ${mediaSection}
-        ${sectionTitle(`Equipes pendentes (${pendentes.length})`)}
-        ${pendentesSection}
-        <div style="margin-top:18px;font-size:10px;color:#ccc;text-align:right;">Gerado por TimeTrack · CGB Engenharia</div>
-      </div>`;
+    // legenda
+    for (const [i, [col, lab]] of ([[`#0ca30c`, 'No prazo'], [`#d03b3b`, 'Atrasado'], [`#9e9e9e`, 'Pendente']] as [string, string][]).entries()) {
+      const lx = PAD + i * 120;
+      ctx.fillStyle = col;
+      rr(lx, y + 3, 10, 10, 2);
+      ctx.fill();
+      txt(lab, lx + 15, y + 13, '10px Arial', '#6b7280');
+    }
+    y += 22;
 
-    const div = document.createElement('div');
-    div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
-    div.innerHTML = html;
-    document.body.appendChild(div);
-    await nextTick();
+    // separador
+    y += 20;
+    ctx.fillStyle = '#e5e7eb';
+    ctx.fillRect(PAD, y, IW, 1);
+    y += 20;
 
-    const canvas = await html2canvas(div.firstElementChild as HTMLElement, { backgroundColor: '#ffffff', scale: 2, useCORS: true });
-    document.body.removeChild(div);
+    // === MÉDIA DE SAÍDA ===
+    secTitle('MÉDIA DE SAÍDA POR BASE');
 
-    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    const CW = Math.floor((IW - (CARDS_PER_ROW - 1) * CARD_GAP) / CARDS_PER_ROW);
+    let cardX = PAD, cardY = y;
+
+    basesComMedia.forEach((b, i) => {
+      const saidas = linhas.filter((r) => r.baseNome === b && r.horaSaida);
+      const media = Math.round(saidas.reduce((a, r) => a + toMinutos(r.horaSaida!), 0) / saidas.length);
+      const hora = formatarMinutos(media);
+      const ok = media <= 510;
+      const bg = ok ? '#f0fdf4' : '#fff5f5';
+      const cor = ok ? '#0ca30c' : '#d03b3b';
+
+      // sombra leve
+      ctx.save();
+      ctx.shadowColor = 'rgba(0,0,0,0.07)';
+      ctx.shadowBlur = 10;
+      ctx.shadowOffsetY = 3;
+      ctx.fillStyle = bg;
+      rr(cardX, cardY, CW, CARD_H, 10);
+      ctx.fill();
+      ctx.restore();
+
+      // faixa lateral colorida
+      ctx.fillStyle = cor;
+      ctx.fillRect(cardX, cardY + 10, 4, CARD_H - 20);
+
+      txt(hora, cardX + 18, cardY + 42, 'bold 26px Arial', cor);
+      txt(b, cardX + 18, cardY + 60, 'bold 11px Arial', '#374151', 'left', CW - 28);
+      txt(`${saidas.length} equipe${saidas.length !== 1 ? 's' : ''}`, cardX + 18, cardY + 74, '10px Arial', '#9ca3af');
+
+      cardX += CW + CARD_GAP;
+      if ((i + 1) % CARDS_PER_ROW === 0) { cardX = PAD; cardY += CARD_H + CARD_GAP; }
+    });
+    if (basesComMedia.length % CARDS_PER_ROW !== 0) cardY += CARD_H + CARD_GAP;
+    y = cardY + 8;
+
+    // separador
+    ctx.fillStyle = '#e5e7eb';
+    ctx.fillRect(PAD, y, IW, 1);
+    y += 20;
+
+    // === EQUIPES PENDENTES ===
+    secTitle(`EQUIPES PENDENTES (${pendentes.length})`);
+
+    if (pendentes.length === 0) {
+      txt('✓  Todas as equipes já apontaram!', PAD + 12, y + 20, 'bold 13px Arial', '#0ca30c');
+    } else {
+      for (const b of pendentesBases) {
+        const eqs = pendentes.filter((r) => r.baseNome === b);
+        txt(b.toUpperCase(), PAD, y + 14, 'bold 9px Arial', '#9ca3af');
+        y += 22;
+
+        const CP = 9, CH = 22, CG = 5;
+        let cx = PAD;
+
+        for (const eq of eqs) {
+          ctx.font = 'bold 10px Arial';
+          const tw = ctx.measureText(eq.identificador).width;
+          const cw = tw + CP * 2;
+          if (cx + cw > PAD + IW && cx > PAD) { cx = PAD; y += CH + CG; }
+          ctx.fillStyle = '#374151';
+          rr(cx, y, cw, CH, 4);
+          ctx.fill();
+          txt(eq.identificador, cx + CP, y + 15, 'bold 10px Arial', '#fff');
+          cx += cw + CG;
+        }
+        y += CH + 8;
+      }
+    }
+
+    y += PAD;
+
+    // === FOOTER ===
+    ctx.fillStyle = '#f9fafb';
+    ctx.fillRect(0, y, W, H_FOOTER);
+    ctx.fillStyle = '#e5e7eb';
+    ctx.fillRect(0, y, W, 1);
+    txt(
+      'Gerado automaticamente · TimeTrack · CGB Engenharia',
+      W / 2, y + 24, '10px Arial', '#9ca3af', 'center',
+    );
+
+    // === DOWNLOAD ===
+    const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
     if (!blob) return;
     const url = URL.createObjectURL(blob);
-    const link = document.createElement('a');
-    link.href = url;
-    link.download = `resumo-cgb-${data.value}.png`;
-    link.click();
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `resumo-cgb-${data.value}.png`;
+    a.click();
     URL.revokeObjectURL(url);
   } finally {
     exportandoResumo.value = false;
