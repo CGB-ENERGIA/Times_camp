@@ -683,21 +683,44 @@ async function salvar() {
 
 async function excluir() {
   if (!editando.value) return;
+  const equipe = editando.value;
   $q.dialog({
     title: 'Excluir equipe',
-    message: `Tem certeza que deseja excluir "${editando.value.identificador}"? Esta ação não pode ser desfeita.`,
-    cancel: true,
+    message: `Tem certeza que deseja excluir "${equipe.identificador}"? Esta ação não pode ser desfeita.`,
+    cancel: { label: 'Cancelar', flat: true },
     persistent: true,
     ok: { label: 'Excluir', color: 'negative', flat: true },
   }).onOk(async () => {
     try {
-      await api.delete(`/equipes/${editando.value!.id}`);
+      await api.delete(`/equipes/${equipe.id}`);
       dialogoAberto.value = false;
       $q.notify({ type: 'positive', message: 'Equipe excluída.' });
       await carregar();
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: { error?: string } } })?.response?.data?.error;
-      $q.notify({ type: 'negative', message: msg || 'Erro ao excluir equipe.' });
+      const status = (err as { response?: { status?: number } })?.response?.status;
+      if (status === 409) {
+        $q.dialog({
+          title: 'Não foi possível excluir',
+          message: 'Esta equipe possui registros de saída vinculados e não pode ser excluída. Deseja desativá-la em vez disso?',
+          cancel: { label: 'Não', flat: true },
+          ok: { label: 'Desativar', color: 'warning', unelevated: true },
+          persistent: true,
+        }).onOk(async () => {
+          await api.put(`/equipes/${equipe.id}`, {
+            tipo: equipe.tipo,
+            identificador: equipe.identificador,
+            horarioPadrao: equipe.horario_padrao_saida.slice(0, 5),
+            supervisor: equipe.supervisor,
+            coordenador: equipe.coordenador,
+            ativo: false,
+          });
+          dialogoAberto.value = false;
+          $q.notify({ type: 'warning', message: 'Equipe desativada.' });
+          await carregar();
+        });
+      } else {
+        $q.notify({ type: 'negative', message: 'Erro ao excluir equipe.' });
+      }
     }
   });
 }
