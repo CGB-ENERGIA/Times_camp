@@ -141,7 +141,7 @@
         </q-card-section>
         <q-separator />
         <q-card-section ref="graficoSecaoEl">
-          <Bar v-if="visaoGrafico === 'base'" :data="dadosGraficoBase" :options="opcoesGraficoBase" style="height: 380px" />
+          <Bar v-if="visaoGrafico === 'base'" :data="dadosGraficoBase" :options="opcoesGraficoBase" :plugins="[stackedLabelPlugin]" style="height: 380px" />
 
           <template v-else-if="visaoGrafico === 'atraso'">
             <Bar
@@ -224,7 +224,8 @@
             v-if="rowsFiltradas.some(r => r.horaSaida)"
             :data="dadosGraficoMedia"
             :options="opcoesGraficoMedia"
-            style="height: 280px"
+            :plugins="[mediaLabelPlugin]"
+            style="height: 300px"
           />
           <div v-else class="text-grey-6 text-center q-pa-lg">Nenhuma saída registrada ainda com esses filtros.</div>
         </q-card-section>
@@ -517,6 +518,72 @@ const mapaGrid = computed<LinhaMapa[]>(() => {
   }));
 });
 
+// Plugin: mostra o valor numérico em cada segmento das barras empilhadas (Status por base)
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const stackedLabelPlugin: any = {
+  id: 'stackedLabels',
+  afterDatasetsDraw(chart: any) {
+    const { ctx } = chart;
+    chart.data.datasets.forEach((dataset: any, datasetIndex: number) => {
+      const meta = chart.getDatasetMeta(datasetIndex);
+      if (meta.hidden) return;
+      meta.data.forEach((bar: any, i: number) => {
+        const value = dataset.data[i] as number;
+        if (!value || value <= 0) return;
+        const barHeight = Math.abs(bar.base - bar.y);
+        if (barHeight < 16) return;
+        ctx.save();
+        ctx.textAlign = 'center';
+        ctx.textBaseline = 'middle';
+        ctx.font = `bold ${barHeight > 28 ? 13 : 11}px sans-serif`;
+        ctx.fillStyle = '#fff';
+        ctx.fillText(String(value), bar.x, bar.y + barHeight / 2);
+        ctx.restore();
+      });
+    });
+  },
+};
+
+// Plugin: mostra a média de saída (HH:MM) acima de cada barra + contagem de equipes dentro
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+const mediaLabelPlugin: any = {
+  id: 'mediaLabels',
+  afterDatasetsDraw(chart: any) {
+    const { ctx } = chart;
+    const dataset = chart.data.datasets[0];
+    if (!dataset) return;
+    const meta = chart.getDatasetMeta(0);
+    if (meta.hidden) return;
+    const corTexto = getComputedStyle(chart.canvas).color || '#333';
+    meta.data.forEach((bar: any, i: number) => {
+      const value = dataset.data[i];
+      if (value === null || value === undefined) return;
+      const timeLabel = formatarMinutos(value as number);
+      const count: number = dataset.counts?.[i] ?? 0;
+      const barHeight = Math.abs(bar.base - bar.y);
+
+      ctx.save();
+      ctx.textAlign = 'center';
+
+      // Tempo acima da barra
+      ctx.font = 'bold 13px sans-serif';
+      ctx.fillStyle = corTexto;
+      ctx.textBaseline = 'bottom';
+      ctx.fillText(timeLabel, bar.x, bar.y - 6);
+
+      // Contagem dentro da barra (se houver espaço)
+      if (count > 0 && barHeight > 32) {
+        ctx.font = '11px sans-serif';
+        ctx.fillStyle = 'rgba(255,255,255,0.9)';
+        ctx.textBaseline = 'top';
+        ctx.fillText(`${count} equipe${count !== 1 ? 's' : ''}`, bar.x, bar.y + 6);
+      }
+
+      ctx.restore();
+    });
+  },
+};
+
 async function carregarMapa() {
   if (carregandoMapa.value) return;
   carregandoMapa.value = true;
@@ -754,22 +821,22 @@ const opcoesGraficoAtraso = computed<ChartOptions<'bar'>>(() => {
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 const dadosGraficoMedia = computed<any>(() => {
   const bases = [...new Set(rowsFiltradas.value.map((r) => r.baseNome))].sort();
+  const porBase = bases.map((b) => {
+    const saidas = rowsFiltradas.value.filter((r) => r.baseNome === b && r.horaSaida);
+    if (!saidas.length) return { media: null, count: 0 };
+    const media = Math.round(saidas.reduce((acc, r) => acc + toMinutos(r.horaSaida!), 0) / saidas.length);
+    return { media, count: saidas.length };
+  });
   return {
     labels: bases,
     datasets: [
       {
         label: 'Média de saída',
-        data: bases.map((b) => {
-          const saidas = rowsFiltradas.value.filter((r) => r.baseNome === b && r.horaSaida);
-          if (!saidas.length) return null;
-          return Math.round(saidas.reduce((acc, r) => acc + toMinutos(r.horaSaida!), 0) / saidas.length);
-        }),
-        backgroundColor: bases.map((b) => {
-          const saidas = rowsFiltradas.value.filter((r) => r.baseNome === b && r.horaSaida);
-          if (!saidas.length) return CORES.pendente;
-          const media = saidas.reduce((acc, r) => acc + toMinutos(r.horaSaida!), 0) / saidas.length;
-          return media <= 510 ? CORES.no_prazo : CORES.atrasado;
-        }),
+        data: porBase.map((d) => d.media),
+        counts: porBase.map((d) => d.count),
+        backgroundColor: porBase.map((d) =>
+          d.media === null ? CORES.pendente : d.media <= 510 ? CORES.no_prazo : CORES.atrasado,
+        ),
         borderRadius: 4,
         order: 1,
       },
@@ -794,6 +861,7 @@ const opcoesGraficoMedia = computed<ChartOptions<'bar'>>(() => {
   return {
     responsive: true,
     maintainAspectRatio: false,
+    layout: { padding: { top: 32 } },
     scales: {
       x: { ticks: { color: corTexto }, grid: { display: false } },
       y: {
