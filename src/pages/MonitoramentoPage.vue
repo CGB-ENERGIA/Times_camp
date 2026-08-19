@@ -995,7 +995,7 @@ async function exportarResumo() {
       const img = new Image();
       img.onload = () => resolve(img);
       img.onerror = () => resolve(null);
-      img.src = '/icons/favicon-128x128.png';
+      img.src = '/icons/logo-cgb.png';
     });
 
     // --- constantes de layout ---
@@ -1074,17 +1074,17 @@ async function exportarResumo() {
     ctx.fillStyle = '#f59e0b';
     ctx.fillRect(0, H_HEADER - 5, W, 5);
 
-    // Logo — sem box nem clip; transparência da logo mostra o gradiente atrás
-    const LS = 82;
-    const LY = (H_HEADER - 5 - LS) / 2;
+    // Logo — proporcional pela altura do header, sem deformação
+    const LOGO_H = 80;
+    const LY = (H_HEADER - 5 - LOGO_H) / 2;
+    let logoDrawW = 0;
     if (logo) {
       const nw = logo.naturalWidth || logo.width;
       const nh = logo.naturalHeight || logo.height;
-      const logoScale = Math.min(LS / nw, LS / nh);
-      const dw = nw * logoScale;
-      const dh = nh * logoScale;
-      const dx = PAD + (LS - dw) / 2;
-      const dy = LY + (LS - dh) / 2;
+      const logoScale = LOGO_H / nh;         // escala pela altura
+      const dw = nw * logoScale;             // largura proporcional real
+      const dh = LOGO_H;
+      logoDrawW = dw;
 
       ctx.save();
       ctx.imageSmoothingEnabled = true;
@@ -1093,11 +1093,11 @@ async function exportarResumo() {
       ctx.shadowBlur = 18;
       ctx.shadowOffsetX = 1;
       ctx.shadowOffsetY = 2;
-      ctx.drawImage(logo, dx, dy, dw, dh);
+      ctx.drawImage(logo, PAD, LY, dw, dh);
       ctx.restore();
     }
 
-    const TX = PAD + (logo ? LS + 18 : 0);
+    const TX = PAD + (logo ? logoDrawW + 18 : 0);
     txt('CGB ENERGIA', TX, H_HEADER / 2 - 5, 'bold 28px Arial', '#ffffff');
     txt('Monitoramento de Saídas de Campo', TX, H_HEADER / 2 + 22, '13px Arial', 'rgba(255,255,255,0.6)');
     txt(data.value, W - PAD, 34, 'bold 13px Arial', 'rgba(255,255,255,0.55)', 'right');
