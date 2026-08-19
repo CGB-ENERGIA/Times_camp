@@ -5,6 +5,17 @@
       <q-space />
       <q-input v-model="data" type="date" dense filled style="width: 170px" @update:model-value="carregarManual" />
       <q-btn round dense flat icon="refresh" :loading="carregando" @click="carregarManual" />
+      <q-btn
+        v-if="todasEquipes.length > 0"
+        unelevated
+        color="primary"
+        icon="ios_share"
+        label="Divulgar"
+        :loading="exportandoResumo"
+        @click="exportarResumo"
+      >
+        <q-tooltip>Gerar imagem resumo para WhatsApp (status + médias + pendentes)</q-tooltip>
+      </q-btn>
     </div>
 
     <div v-if="todasEquipes.length > 0" ref="conteudoEl">
@@ -451,6 +462,7 @@ const mapaCardEl = ref<{ $el: HTMLElement } | null>(null);
 const exportandoMedia = ref(false);
 const exportandoMapa = ref(false);
 const exportandoPendentes = ref(false);
+const exportandoResumo = ref(false);
 
 const busca = ref('');
 const baseFiltro = ref<number[]>([]);
@@ -964,6 +976,133 @@ function corCelulaHeatmap(contagem: number): string {
   if (contagem === 0) return 'transparent';
   const intensidade = 0.12 + 0.78 * (contagem / maxContagemHeatmap.value);
   return `rgba(25, 118, 210, ${intensidade.toFixed(2)})`;
+}
+
+async function exportarResumo() {
+  if (exportandoResumo.value) return;
+  exportandoResumo.value = true;
+  try {
+    const linhas = rowsFiltradas.value;
+    const pendentes = linhas.filter((r) => r.status === 'pendente');
+    const baseNomes = [...new Set(linhas.map((r) => r.baseNome))].sort();
+
+    // ---- construir o HTML off-screen ----
+    const W = 820;
+    const PAD = 28;
+    const innerW = W - PAD * 2;
+
+    function chip(text: string, bg: string, color = '#fff', extra = '') {
+      return `<span style="display:inline-block;padding:3px 10px;background:${bg};color:${color};border-radius:5px;font-size:11px;font-weight:700;margin:2px;${extra}">${text}</span>`;
+    }
+
+    function sectionTitle(t: string) {
+      return `<div style="font-size:11px;font-weight:700;letter-spacing:0.07em;text-transform:uppercase;color:#888;border-bottom:1px solid #eee;padding-bottom:6px;margin:18px 0 10px;">${t}</div>`;
+    }
+
+    // Status por base — barras horizontais
+    const statusSection = baseNomes.map((b) => {
+      const eqs = linhas.filter((r) => r.baseNome === b);
+      const total = eqs.length;
+      if (!total) return '';
+      const np = eqs.filter((r) => r.status === 'no_prazo').length;
+      const at = eqs.filter((r) => r.status === 'atrasado').length;
+      const pe = eqs.filter((r) => r.status === 'pendente').length;
+      const barW = innerW - 160;
+      const npW = Math.round((np / total) * barW);
+      const atW = Math.round((at / total) * barW);
+      const peW = barW - npW - atW;
+      return `
+        <div style="display:flex;align-items:center;gap:10px;margin-bottom:7px;">
+          <div style="width:150px;font-size:12px;font-weight:600;color:#333;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;">${b}</div>
+          <div style="display:flex;height:22px;border-radius:4px;overflow:hidden;flex:1;">
+            ${np > 0 ? `<div style="width:${npW}px;background:#0ca30c;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">${np}</div>` : ''}
+            ${at > 0 ? `<div style="width:${atW}px;background:#d03b3b;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;">${at}</div>` : ''}
+            ${pe > 0 ? `<div style="width:${peW}px;background:#bdbdbd;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:600;color:#fff;">${pe}</div>` : ''}
+          </div>
+          <div style="font-size:11px;color:#888;width:30px;text-align:right;">${total}</div>
+        </div>`;
+    }).join('');
+
+    // Média por base — cards em grid
+    const mediaSection = (() => {
+      const cards = baseNomes.map((b) => {
+        const saidas = linhas.filter((r) => r.baseNome === b && r.horaSaida);
+        if (!saidas.length) return '';
+        const media = Math.round(saidas.reduce((acc, r) => acc + toMinutos(r.horaSaida!), 0) / saidas.length);
+        const hora = formatarMinutos(media);
+        const ok = media <= 510;
+        const bg = ok ? '#e8f5e9' : '#ffebee';
+        const cor = ok ? '#0ca30c' : '#d03b3b';
+        return `<div style="padding:10px 14px;background:${bg};border-radius:6px;border-left:3px solid ${cor};min-width:160px;">
+          <div style="font-size:22px;font-weight:700;color:${cor};">${hora}</div>
+          <div style="font-size:11px;font-weight:600;color:#333;margin-top:2px;">${b}</div>
+          <div style="font-size:10px;color:#888;">${saidas.length} equipe${saidas.length !== 1 ? 's' : ''}</div>
+        </div>`;
+      }).filter(Boolean).join('');
+      return `<div style="display:flex;flex-wrap:wrap;gap:8px;">${cards}</div>`;
+    })();
+
+    // Pendentes — chips por base
+    const pendentesBases = baseNomes.filter((b) => pendentes.some((r) => r.baseNome === b));
+    const pendentesSection = pendentes.length === 0
+      ? `<div style="color:#0ca30c;font-size:13px;font-weight:600;">✓ Todas as equipes já apontaram!</div>`
+      : pendentesBases.map((b) => {
+          const eqs = pendentes.filter((r) => r.baseNome === b);
+          return `<div style="margin-bottom:8px;">
+            <div style="font-size:10px;font-weight:700;color:#888;margin-bottom:3px;">${b.toUpperCase()}</div>
+            <div>${eqs.map((r) => chip(r.identificador, '#757575')).join('')}</div>
+          </div>`;
+        }).join('');
+
+    // Legenda de status
+    const legenda = `<div style="display:flex;gap:14px;font-size:10px;color:#888;margin-top:6px;">
+      ${chip('No prazo', '#0ca30c', '#fff', 'font-size:10px;')}
+      ${chip('Atrasado', '#d03b3b', '#fff', 'font-size:10px;')}
+      ${chip('Pendente', '#bdbdbd', '#fff', 'font-size:10px;')}
+    </div>`;
+
+    const html = `
+      <div style="width:${W}px;padding:${PAD}px;background:#fff;font-family:Arial,Helvetica,sans-serif;color:#333;box-sizing:border-box;">
+        <div style="border-bottom:3px solid #1565c0;padding-bottom:12px;margin-bottom:4px;display:flex;justify-content:space-between;align-items:flex-end;">
+          <div>
+            <div style="font-size:22px;font-weight:700;color:#1565c0;">CGB ENERGIA</div>
+            <div style="font-size:13px;color:#666;margin-top:2px;">Resumo de saídas — ${data.value}</div>
+          </div>
+          <div style="text-align:right;font-size:11px;color:#888;">
+            <div>${linhas.length} equipes monitoradas</div>
+            <div>${pendentes.length} pendente${pendentes.length !== 1 ? 's' : ''} · ${linhas.filter(r => r.status === 'no_prazo').length} no prazo · ${linhas.filter(r => r.status === 'atrasado').length} atrasada${linhas.filter(r => r.status === 'atrasado').length !== 1 ? 's' : ''}</div>
+          </div>
+        </div>
+        ${sectionTitle('Status por base')}
+        ${statusSection}
+        ${legenda}
+        ${sectionTitle('Média de saída por base')}
+        ${mediaSection}
+        ${sectionTitle(`Equipes pendentes (${pendentes.length})`)}
+        ${pendentesSection}
+        <div style="margin-top:18px;font-size:10px;color:#ccc;text-align:right;">Gerado por TimeTrack · CGB Engenharia</div>
+      </div>`;
+
+    const div = document.createElement('div');
+    div.style.cssText = 'position:fixed;top:-9999px;left:-9999px;';
+    div.innerHTML = html;
+    document.body.appendChild(div);
+    await nextTick();
+
+    const canvas = await html2canvas(div.firstElementChild as HTMLElement, { backgroundColor: '#ffffff', scale: 2, useCORS: true });
+    document.body.removeChild(div);
+
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (!blob) return;
+    const url = URL.createObjectURL(blob);
+    const link = document.createElement('a');
+    link.href = url;
+    link.download = `resumo-cgb-${data.value}.png`;
+    link.click();
+    URL.revokeObjectURL(url);
+  } finally {
+    exportandoResumo.value = false;
+  }
 }
 
 async function capturarEl(el: HTMLElement, nomeArquivo: string) {
