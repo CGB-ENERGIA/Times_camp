@@ -57,8 +57,11 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     if (session.role === 'tecnico') {
       const supervisores = session.supervisores?.length ? session.supervisores : (session.supervisor ? [session.supervisor] : []);
-      if (!supervisores.includes(equipe.supervisor)) {
-        res.status(403).json({ error: 'Você só pode registrar saídas de equipes dos seus supervisores' });
+      const equipesIds = session.equipesIds ?? [];
+      const podeByEquipe = equipesIds.includes(Number(equipe.id));
+      const podeBySupervisor = supervisores.includes(equipe.supervisor);
+      if (!podeByEquipe && !podeBySupervisor) {
+        res.status(403).json({ error: 'Você só pode registrar saídas de equipes dos seus supervisores ou equipes atribuídas diretamente' });
         return;
       }
     }

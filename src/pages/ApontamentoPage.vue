@@ -14,8 +14,8 @@
         dense
         style="min-width: 220px"
       />
-      <div v-else-if="authStore.isCoordenador" class="text-subtitle2">Coordenador: {{ authStore.user?.coordenador }}</div>
-      <div v-else class="text-subtitle2">Supervisor: {{ authStore.user?.supervisor }}</div>
+      <div v-else-if="authStore.isCoordenador" class="text-subtitle2">Coordenador: {{ authStore.user?.coordenadores?.join(', ') || authStore.user?.coordenador }}</div>
+      <div v-else class="text-subtitle2">Supervisor: {{ authStore.user?.supervisores?.join(', ') || authStore.user?.supervisor }}</div>
 
       <q-space />
       <div class="text-caption text-grey-7">{{ dataHoje }}</div>
@@ -260,10 +260,15 @@ const opcoesBase = computed(() =>
 const baseAtual = computed(() => resposta.value?.bases.find((b) => b.baseId === baseSelecionada.value));
 
 const equipesDoSupervisor = computed<EquipeStatus[]>(() => {
-  const supervisor = authStore.user?.supervisor;
-  if (!supervisor) return [];
+  const supervisores = authStore.user?.supervisores?.length
+    ? authStore.user.supervisores
+    : authStore.user?.supervisor ? [authStore.user.supervisor] : [];
+  const equipesIds = new Set(authStore.user?.equipesIds ?? []);
+  if (!supervisores.length && !equipesIds.size) return [];
   return (resposta.value?.bases ?? []).flatMap((b) =>
-    b.equipes.filter((e) => e.supervisor === supervisor).map((e) => ({ ...e, baseNome: b.baseNome })),
+    b.equipes
+      .filter((e) => supervisores.includes(e.supervisor ?? '') || equipesIds.has(e.equipeId))
+      .map((e) => ({ ...e, baseNome: b.baseNome })),
   );
 });
 

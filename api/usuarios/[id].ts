@@ -18,7 +18,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     return;
   }
 
-  const { nome, role, supervisores, coordenadores, ativo, senha } = req.body || {};
+  const { nome, role, supervisores, coordenadores, equipesIds, ativo, senha } = req.body || {};
 
   const ROLES = ['admin', 'tecnico', 'coordenador'];
   if (role !== undefined && !ROLES.includes(role)) {
@@ -30,25 +30,54 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   const supervisoresArr: string[] = Array.isArray(supervisores) ? supervisores : [];
   const coordenadoresArr: string[] = Array.isArray(coordenadores) ? coordenadores : [];
+  const equipesIdsArr: number[] = Array.isArray(equipesIds) ? equipesIds : [];
   const supervisorPrimario: string | null = supervisoresArr[0] ?? null;
   const coordenadorPrimario: string | null = coordenadoresArr[0] ?? null;
   const atualizarSupervisores = Array.isArray(supervisores);
   const atualizarCoordenadores = Array.isArray(coordenadores);
+  const atualizarEquipesIds = Array.isArray(equipesIds);
+
+  const RETURNING = sql`returning id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, equipes_ids, ativo, created_at`;
 
   let rows;
-  if (atualizarSupervisores && atualizarCoordenadores) {
+  if (atualizarSupervisores && atualizarCoordenadores && atualizarEquipesIds) {
+    rows = await sql`
+      update usuarios set
+        nome          = coalesce(${nome ?? null}, nome),
+        role          = coalesce(${role ?? null}::user_role, role),
+        supervisor    = ${supervisorPrimario},
+        coordenador   = ${coordenadorPrimario},
+        supervisores  = ${supervisoresArr}::text[],
+        coordenadores = ${coordenadoresArr}::text[],
+        equipes_ids   = ${equipesIdsArr}::integer[],
+        ativo         = coalesce(${ativo ?? null}, ativo),
+        senha_hash    = coalesce(${senhaHash}, senha_hash)
+      where id = ${id}
+      ${RETURNING}
+    `;
+  } else if (atualizarSupervisores && atualizarEquipesIds) {
     rows = await sql`
       update usuarios set
         nome         = coalesce(${nome ?? null}, nome),
         role         = coalesce(${role ?? null}::user_role, role),
         supervisor   = ${supervisorPrimario},
-        coordenador  = ${coordenadorPrimario},
         supervisores = ${supervisoresArr}::text[],
-        coordenadores = ${coordenadoresArr}::text[],
+        equipes_ids  = ${equipesIdsArr}::integer[],
         ativo        = coalesce(${ativo ?? null}, ativo),
         senha_hash   = coalesce(${senhaHash}, senha_hash)
       where id = ${id}
-      returning id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, ativo, created_at
+      ${RETURNING}
+    `;
+  } else if (atualizarEquipesIds) {
+    rows = await sql`
+      update usuarios set
+        nome        = coalesce(${nome ?? null}, nome),
+        role        = coalesce(${role ?? null}::user_role, role),
+        equipes_ids = ${equipesIdsArr}::integer[],
+        ativo       = coalesce(${ativo ?? null}, ativo),
+        senha_hash  = coalesce(${senhaHash}, senha_hash)
+      where id = ${id}
+      ${RETURNING}
     `;
   } else if (atualizarSupervisores) {
     rows = await sql`
@@ -60,17 +89,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         ativo        = coalesce(${ativo ?? null}, ativo),
         senha_hash   = coalesce(${senhaHash}, senha_hash)
       where id = ${id}
-      returning id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, ativo, created_at
+      ${RETURNING}
     `;
   } else {
     rows = await sql`
       update usuarios set
-        nome        = coalesce(${nome ?? null}, nome),
-        role        = coalesce(${role ?? null}::user_role, role),
-        ativo       = coalesce(${ativo ?? null}, ativo),
-        senha_hash  = coalesce(${senhaHash}, senha_hash)
+        nome       = coalesce(${nome ?? null}, nome),
+        role       = coalesce(${role ?? null}::user_role, role),
+        ativo      = coalesce(${ativo ?? null}, ativo),
+        senha_hash = coalesce(${senhaHash}, senha_hash)
       where id = ${id}
-      returning id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, ativo, created_at
+      ${RETURNING}
     `;
   }
 

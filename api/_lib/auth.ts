@@ -21,6 +21,7 @@ export interface SessionPayload {
   coordenador: string | null;
   supervisores: string[];
   coordenadores: string[];
+  equipesIds: number[];
 }
 
 export function signSession(payload: SessionPayload): string {

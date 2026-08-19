@@ -54,10 +54,25 @@
             v-model="forma.supervisores"
             :options="opcoesSupervisor"
             label="Supervisores"
-            hint="O técnico verá e apontará equipes de todos os supervisores selecionados"
+            hint="Acesso a todas as equipes desses supervisores"
             filled
             multiple
             use-chips
+          />
+          <q-select
+            v-if="forma.role === 'tecnico'"
+            v-model="forma.equipesIds"
+            :options="opcoesEquipe"
+            emit-value
+            map-options
+            label="Equipes específicas (opcional)"
+            hint="Acesso a equipes individuais, além dos supervisores"
+            filled
+            multiple
+            use-chips
+            use-input
+            input-debounce="0"
+            :filter-fn="filtrarEquipes"
           />
           <q-select
             v-if="forma.role === 'coordenador'"
@@ -113,12 +128,17 @@ interface Usuario {
   coordenador: string | null;
   supervisores: string[];
   coordenadores: string[];
+  equipes_ids: number[];
   ativo: boolean;
 }
 
 interface Equipe {
+  id: number;
+  tipo: string;
+  identificador: string;
   supervisor: string | null;
   coordenador: string | null;
+  ativo: boolean;
 }
 
 const $q = useQuasar();
@@ -140,6 +160,8 @@ const usuariosFiltrados = computed(() => {
 });
 const opcoesSupervisor = ref<string[]>([]);
 const opcoesCoordenador = ref<string[]>([]);
+const opcoesEquipe = ref<Array<{ label: string; value: number }>>([]);
+const todasOpcoesEquipe = ref<Array<{ label: string; value: number }>>([]);
 const carregando = ref(false);
 const dialogoAberto = ref(false);
 const editando = ref<Usuario | null>(null);
@@ -151,6 +173,7 @@ const forma = ref({
   role: 'tecnico' as Role,
   supervisores: [] as string[],
   coordenadores: [] as string[],
+  equipesIds: [] as number[],
   senha: '',
   ativo: true,
 });
@@ -192,6 +215,21 @@ async function carregarSupervisores() {
   const { data } = await api.get<Equipe[]>('/equipes');
   opcoesSupervisor.value = [...new Set(data.map((e) => e.supervisor).filter((v): v is string => !!v))].sort();
   opcoesCoordenador.value = [...new Set(data.map((e) => e.coordenador).filter((v): v is string => !!v))].sort();
+  const lista = data
+    .filter((e) => e.ativo)
+    .map((e) => ({ label: `${e.identificador} · ${e.tipo}${e.supervisor ? ' · ' + e.supervisor : ''}`, value: e.id }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  todasOpcoesEquipe.value = lista;
+  opcoesEquipe.value = lista;
+}
+
+function filtrarEquipes(val: string, update: (fn: () => void) => void) {
+  update(() => {
+    const q = val.toLowerCase();
+    opcoesEquipe.value = q
+      ? todasOpcoesEquipe.value.filter((e) => e.label.toLowerCase().includes(q))
+      : todasOpcoesEquipe.value;
+  });
 }
 
 async function carregar() {
@@ -207,19 +245,22 @@ async function carregar() {
 function abrirNovo() {
   editando.value = null;
   mostrarSenha.value = false;
-  forma.value = { nome: '', usuario: '', role: 'tecnico', supervisores: [], coordenadores: [], senha: '', ativo: true };
+  opcoesEquipe.value = todasOpcoesEquipe.value;
+  forma.value = { nome: '', usuario: '', role: 'tecnico', supervisores: [], coordenadores: [], equipesIds: [], senha: '', ativo: true };
   dialogoAberto.value = true;
 }
 
 function abrirEdicao(usuario: Usuario) {
   editando.value = usuario;
   mostrarSenha.value = false;
+  opcoesEquipe.value = todasOpcoesEquipe.value;
   forma.value = {
     nome: usuario.nome,
     usuario: usuario.usuario,
     role: usuario.role,
     supervisores: usuario.supervisores?.length ? [...usuario.supervisores] : (usuario.supervisor ? [usuario.supervisor] : []),
     coordenadores: usuario.coordenadores?.length ? [...usuario.coordenadores] : (usuario.coordenador ? [usuario.coordenador] : []),
+    equipesIds: [...(usuario.equipes_ids ?? [])],
     senha: '',
     ativo: usuario.ativo,
   };
@@ -244,6 +285,7 @@ async function salvar() {
         role: forma.value.role,
         supervisores: forma.value.role === 'tecnico' ? forma.value.supervisores : [],
         coordenadores: forma.value.role === 'coordenador' ? forma.value.coordenadores : [],
+        equipesIds: forma.value.equipesIds,
         ativo: forma.value.ativo,
         senha: forma.value.senha || undefined,
       });
@@ -255,6 +297,7 @@ async function salvar() {
         role: forma.value.role,
         supervisores: forma.value.supervisores,
         coordenadores: forma.value.coordenadores,
+        equipesIds: forma.value.equipesIds,
       });
     }
     dialogoAberto.value = false;

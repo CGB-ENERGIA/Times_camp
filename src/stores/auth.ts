@@ -13,6 +13,7 @@ export interface Usuario {
   coordenador: string | null;
   supervisores: string[];
   coordenadores: string[];
+  equipesIds: number[];
 }
 
 export const useAuthStore = defineStore('auth', {

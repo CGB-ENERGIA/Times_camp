@@ -11,7 +11,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
   if (req.method === 'GET') {
     const usuarios = await sql`
-      select id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, ativo, created_at
+      select id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, equipes_ids, ativo, created_at
       from usuarios
       order by nome
     `;
@@ -20,7 +20,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
   }
 
   if (req.method === 'POST') {
-    const { nome, usuario, senha, role, supervisores, coordenadores } = req.body || {};
+    const { nome, usuario, senha, role, supervisores, coordenadores, equipesIds } = req.body || {};
     if (!nome || !usuario || !senha || !role) {
       res.status(400).json({ error: 'Informe nome, usuário, senha e perfil' });
       return;
@@ -31,6 +31,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     }
     const supervisoresArr: string[] = Array.isArray(supervisores) ? supervisores : [];
     const coordenadoresArr: string[] = Array.isArray(coordenadores) ? coordenadores : [];
+    const equipesIdsArr: number[] = Array.isArray(equipesIds) ? equipesIds : [];
     if (role === 'tecnico' && supervisoresArr.length === 0) {
       res.status(400).json({ error: 'Técnico precisa estar vinculado a pelo menos um supervisor' });
       return;
@@ -46,16 +47,17 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
 
     try {
       const [novo] = await sql`
-        insert into usuarios (nome, usuario, senha_hash, role, supervisor, coordenador, supervisores, coordenadores, ativo)
+        insert into usuarios (nome, usuario, senha_hash, role, supervisor, coordenador, supervisores, coordenadores, equipes_ids, ativo)
         values (
           ${nome}, ${usuario}, ${senhaHash}, ${role},
           ${role === 'tecnico' ? supervisorPrimario : null},
           ${role === 'coordenador' ? coordenadorPrimario : null},
           ${role === 'tecnico' ? supervisoresArr : sql`'{}'::text[]`},
           ${role === 'coordenador' ? coordenadoresArr : sql`'{}'::text[]`},
+          ${equipesIdsArr}::integer[],
           true
         )
-        returning id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, ativo, created_at
+        returning id, nome, usuario, role, base_id, supervisor, coordenador, supervisores, coordenadores, equipes_ids, ativo, created_at
       `;
       res.status(201).json(novo);
     } catch (err) {
