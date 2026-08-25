@@ -263,11 +263,12 @@ const equipesDoSupervisor = computed<EquipeStatus[]>(() => {
   const supervisores = authStore.user?.supervisores?.length
     ? authStore.user.supervisores
     : authStore.user?.supervisor ? [authStore.user.supervisor] : [];
+  const supervisoresLower = supervisores.map((s) => s.toLowerCase());
   const equipesIds = new Set(authStore.user?.equipesIds ?? []);
   if (!supervisores.length && !equipesIds.size) return [];
   return (resposta.value?.bases ?? []).flatMap((b) =>
     b.equipes
-      .filter((e) => supervisores.includes(e.supervisor ?? '') || equipesIds.has(e.equipeId))
+      .filter((e) => supervisoresLower.includes((e.supervisor ?? '').toLowerCase()) || equipesIds.has(e.equipeId))
       .map((e) => ({ ...e, baseNome: b.baseNome })),
   );
 });
@@ -275,8 +276,9 @@ const equipesDoSupervisor = computed<EquipeStatus[]>(() => {
 const equipesDoCoordenador = computed<EquipeStatus[]>(() => {
   const coordenador = authStore.user?.coordenador;
   if (!coordenador) return [];
+  const coordenadorLower = coordenador.toLowerCase();
   return (resposta.value?.bases ?? []).flatMap((b) =>
-    b.equipes.filter((e) => e.coordenador === coordenador).map((e) => ({ ...e, baseNome: b.baseNome })),
+    b.equipes.filter((e) => (e.coordenador ?? '').toLowerCase() === coordenadorLower).map((e) => ({ ...e, baseNome: b.baseNome })),
   );
 });
 
