@@ -579,7 +579,18 @@ const tipoFiltro = ref<string[]>([]);
 const supervisorFiltro = ref<string[]>([]);
 const coordenadorFiltro = ref<string[]>([]);
 const statusFiltro = ref<Status[]>([]);
-const visaoGrafico = ref<'base' | 'atraso' | 'heatmap'>('base');
+const visaoGrafico = ref<'base' | 'atraso' | 'heatmap'>(
+  (() => {
+    try {
+      const v = localStorage.getItem('monitoramento:visaoGrafico');
+      if (v === 'base' || v === 'atraso' || v === 'heatmap') return v;
+    } catch {}
+    return 'base';
+  })(),
+);
+watch(visaoGrafico, (v) => {
+  try { localStorage.setItem('monitoramento:visaoGrafico', v); } catch {}
+}, { immediate: false });
 
 // ---- Heatmap semana ----
 interface SaidaHm { equipe_id: number; data: string; hora_saida: string }
