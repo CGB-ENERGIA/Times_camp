@@ -1869,7 +1869,7 @@ async function exportarHeatmapCanvas() {
   const CARD_H = 58, CARD_GAP = 8, CARDS_COL = 3;
   const CARD_W = Math.floor((IW - (CARDS_COL - 1) * CARD_GAP) / CARDS_COL);
   const n_base_rows = Math.ceil(grupos.length / CARDS_COL);
-  const H_RESUMO = 36 + 72 + 16 + n_base_rows * (CARD_H + CARD_GAP) + 16;
+  const H_RESUMO = 36 + (grupos.length > 1 ? 72 + 16 : 0) + n_base_rows * (CARD_H + CARD_GAP) + 16;
 
   let totalH = H_HEADER + H_SUBTIT + H_COL_HDR + H_LEGEND + H_FOOTER + H_RESUMO;
   for (const g of grupos) totalH += BASE_HEAD_H + g.equipes.length * ROW_H + BASE_GAP;
@@ -2023,23 +2023,25 @@ async function exportarHeatmapCanvas() {
   const mgeral = mediaHm(todasHorasGeral);
   const LIMITE_MIN = 510; // 08:30
 
-  // Card média geral
-  const geralOk = mgeral.media !== null && mgeral.media <= LIMITE_MIN;
-  const geralCor = mgeral.media === null ? '#94a3b8' : geralOk ? '#15803d' : '#b91c1c';
-  const geralBg = mgeral.media === null ? '#f8fafc' : geralOk ? '#f0fdf4' : '#fff5f5';
-  ctx.fillStyle = geralBg; ctx.fillRect(PAD, y, IW, 72);
-  ctx.fillStyle = geralCor; ctx.fillRect(PAD, y, 5, 72);
-  ctx.strokeStyle = geralOk ? '#86efac' : mgeral.media === null ? '#e2e8f0' : '#fca5a5';
-  ctx.lineWidth = 1; ctx.strokeRect(PAD, y, IW, 72);
-  txt('MÉDIA GERAL', PAD + 16, y + 20, 'bold 9px Arial', '#64748b');
-  txt(mgeral.media !== null ? formatarMinutos(mgeral.media) : '—', PAD + 16, y + 56, 'bold 34px Arial', geralCor);
-  if (mgeral.media !== null) {
-    txt(`${mgeral.count} registros (expurgo: ↓${mgeral.minH ?? '—'} ↑${mgeral.maxH ?? '—'})`,
-      PAD + 130, y + 32, '10px Arial', '#64748b');
-    txt(geralOk ? '✓ Dentro do limite (08:30)' : '✗ Acima do limite (08:30)',
-      PAD + 130, y + 52, 'bold 11px Arial', geralCor);
+  // Card média geral — só exibe quando há mais de uma base visível
+  if (grupos.length > 1) {
+    const geralOk = mgeral.media !== null && mgeral.media <= LIMITE_MIN;
+    const geralCor = mgeral.media === null ? '#94a3b8' : geralOk ? '#15803d' : '#b91c1c';
+    const geralBg = mgeral.media === null ? '#f8fafc' : geralOk ? '#f0fdf4' : '#fff5f5';
+    ctx.fillStyle = geralBg; ctx.fillRect(PAD, y, IW, 72);
+    ctx.fillStyle = geralCor; ctx.fillRect(PAD, y, 5, 72);
+    ctx.strokeStyle = geralOk ? '#86efac' : mgeral.media === null ? '#e2e8f0' : '#fca5a5';
+    ctx.lineWidth = 1; ctx.strokeRect(PAD, y, IW, 72);
+    txt('MÉDIA GERAL', PAD + 16, y + 20, 'bold 9px Arial', '#64748b');
+    txt(mgeral.media !== null ? formatarMinutos(mgeral.media) : '—', PAD + 16, y + 56, 'bold 34px Arial', geralCor);
+    if (mgeral.media !== null) {
+      txt(`${mgeral.count} registros (expurgo: ↓${mgeral.minH ?? '—'} ↑${mgeral.maxH ?? '—'})`,
+        PAD + 130, y + 32, '10px Arial', '#64748b');
+      txt(geralOk ? '✓ Dentro do limite (08:30)' : '✗ Acima do limite (08:30)',
+        PAD + 130, y + 52, 'bold 11px Arial', geralCor);
+    }
+    y += 72 + 16;
   }
-  y += 72 + 16;
 
   // Cards por base
   const baseMedias = grupos.map(g => {
