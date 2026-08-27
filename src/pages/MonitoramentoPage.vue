@@ -555,7 +555,7 @@ const tipos = ['GERE', 'GOMAN', 'GSTC'];
 const $q = useQuasar();
 
 const data = ref(hojeStr());
-const NOMES_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+const NOMES_DIA = ['Dom', 'Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb'];
 
 function segundaAtual(): string {
   const hoje = new Date();
@@ -569,11 +569,11 @@ const dataInicioHm = ref<string>(segundaAtual());
 
 const diasDaSemana = computed(() => {
   const inicio = new Date(dataInicioHm.value + 'T00:00:00');
-  return NOMES_SEMANA.map((nomeCurto, i) => {
+  return Array.from({ length: 7 }, (_, i) => {
     const d = new Date(inicio);
     d.setDate(inicio.getDate() + i);
     const str = d.toLocaleDateString('en-CA');
-    return { str, nomeCurto, numDia: d.getDate(), ehHoje: str === hojeStr() };
+    return { str, nomeCurto: NOMES_DIA[d.getDay()]!, numDia: d.getDate(), ehHoje: str === hojeStr() };
   });
 });
 
