@@ -652,10 +652,10 @@ const mapaGrid = computed<LinhaMapa[]>(() => {
   const saidaMap = new Map<string, string>();
   const justMap = new Map<string, string>();
   for (const s of saidasMapa.value) {
-    saidaMap.set(`${s.equipe_id}-${s.data}`, s.hora_saida);
+    saidaMap.set(`${s.equipe_id}-${String(s.data).slice(0, 10)}`, s.hora_saida);
   }
   for (const j of justMapa.value) {
-    const k = `${j.equipe_id}-${j.data}`;
+    const k = `${j.equipe_id}-${String(j.data).slice(0, 10)}`;
     if (!justMap.has(k)) justMap.set(k, j.tipo);
   }
   return rowsFiltradas.value.map((eq) => ({
@@ -1135,8 +1135,8 @@ const colunasHeatmap = computed(() => {
 const rowsHeatmapSemana = computed(() => {
   const saidaMap = new Map<string, string>();
   const justSet = new Set<string>();
-  for (const s of saidasHm.value) saidaMap.set(`${s.equipe_id}-${s.data}`, s.hora_saida);
-  for (const j of justHm.value) justSet.add(`${j.equipe_id}-${j.data}`);
+  for (const s of saidasHm.value) saidaMap.set(`${s.equipe_id}-${String(s.data).slice(0, 10)}`, s.hora_saida);
+  for (const j of justHm.value) justSet.add(`${j.equipe_id}-${String(j.data).slice(0, 10)}`);
 
   const bases = [...new Set(rowsFiltradas.value.map((r) => r.baseNome))].sort();
   return bases.map((baseNome) => ({
