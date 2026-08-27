@@ -854,7 +854,7 @@ watch(
   { immediate: true },
 );
 
-// Troca de gráfico: fade + leve deslocamento em vez de aparecer seco
+// Troca de gráfico: fade + carrega dados do heatmap se necessário
 watch(visaoGrafico, (v) => {
   const el = graficoSecaoEl.value?.$el;
   if (el) gsap.fromTo(el, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, ease: 'power1.out' });
@@ -1851,6 +1851,7 @@ let intervalo: ReturnType<typeof setInterval> | undefined;
 
 onMounted(() => {
   void carregar();
+  if (visaoGrafico.value === 'heatmap') void carregarHeatmapSemana();
   intervalo = setInterval(() => void carregar(), 45000);
 });
 
