@@ -1866,7 +1866,7 @@ async function exportarHeatmapCanvas() {
     return { media: Math.round(soma / restantes.length), count: restantes.length, minH, maxH };
   }
 
-  const CARD_H = 58, CARD_GAP = 8, CARDS_COL = 3;
+  const CARD_H = 76, CARD_GAP = 8, CARDS_COL = 3;
   const CARD_W = Math.floor((IW - (CARDS_COL - 1) * CARD_GAP) / CARDS_COL);
   const n_base_rows = Math.ceil(grupos.length / CARDS_COL);
   const H_RESUMO = 36 + (grupos.length > 1 ? 72 + 16 : 0) + n_base_rows * (CARD_H + CARD_GAP) + 16;
@@ -2058,9 +2058,13 @@ async function exportarHeatmapCanvas() {
     ctx.fillStyle = cor; ctx.fillRect(cardX, cardY + 8, 4, CARD_H - 16);
     ctx.strokeStyle = ok ? '#d1fae5' : bm.media === null ? '#e2e8f0' : '#fee2e2';
     ctx.lineWidth = 1; rr(cardX, cardY, CARD_W, CARD_H, 6); ctx.stroke();
-    txt(bm.nome, cardX + 14, cardY + 18, 'bold 10px Arial', '#374151', 'left', CARD_W - 18);
+    txt(bm.nome, cardX + 14, cardY + 16, 'bold 10px Arial', '#374151', 'left', CARD_W - 18);
     txt(bm.media !== null ? formatarMinutos(bm.media) : 'Sem dados', cardX + 14, cardY + 44, 'bold 18px Arial', cor);
-    if (bm.media !== null) txt(`${bm.count} reg.`, cardX + CARD_W - 8, cardY + 44, '9px Arial', '#9ca3af', 'right');
+    if (bm.media !== null) {
+      txt(`${bm.count} reg.`, cardX + CARD_W - 8, cardY + 44, '9px Arial', '#9ca3af', 'right');
+      const expLine = bm.minH && bm.maxH ? `Expurgo: ↓${bm.minH}  ↑${bm.maxH}` : 'Sem expurgo';
+      txt(expLine, cardX + 14, cardY + 64, '9px Arial', '#94a3b8');
+    }
     cardX += CARD_W + CARD_GAP;
     cardCol++;
     if (cardCol >= CARDS_COL) { cardCol = 0; cardX = PAD; cardY += CARD_H + CARD_GAP; }
