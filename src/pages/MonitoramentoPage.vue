@@ -1831,13 +1831,190 @@ async function exportarPendentes() {
   }
 }
 
-async function exportarGrafico() {
-  const cardEl = graficoCardEl.value?.$el;
-  if (!cardEl || exportando.value) return;
+async function exportarHeatmapCanvas() {
+  const grupos = rowsHeatmapSemana.value;
+  const dias = diasDaSemana.value;
+  if (!grupos.length) { $q.notify({ type: 'info', message: 'Nenhum dado para exportar' }); return; }
 
+  const logo = await new Promise<HTMLImageElement | null>((resolve) => {
+    const img = new Image();
+    img.onload = () => resolve(img); img.onerror = () => resolve(null);
+    img.src = '/icons/logo-cgb.png';
+  });
+
+  const SCALE = 2, W = 800, PAD = 20, IW = W - PAD * 2;
+  const H_HEADER = 96, H_SUBTIT = 38, H_COL_HDR = 32;
+  const BASE_HEAD_H = 36, ROW_H = 26, BASE_GAP = 10;
+  const H_LEGEND = 40, H_FOOTER = 38;
+  const LABEL_W = 155, CELL_W = Math.floor((IW - LABEL_W) / 7);
+
+  let totalH = H_HEADER + H_SUBTIT + H_COL_HDR + H_LEGEND + H_FOOTER;
+  for (const g of grupos) totalH += BASE_HEAD_H + g.equipes.length * ROW_H + BASE_GAP;
+
+  const canvas = document.createElement('canvas');
+  canvas.width = W * SCALE; canvas.height = totalH * SCALE;
+  const ctx = canvas.getContext('2d')!;
+  ctx.scale(SCALE, SCALE);
+
+  function rr(x: number, y: number, w: number, h: number, r = 4) {
+    ctx.beginPath();
+    ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+    ctx.arcTo(x + w, y, x + w, y + r, r); ctx.lineTo(x + w, y + h - r);
+    ctx.arcTo(x + w, y + h, x + w - r, y + h, r); ctx.lineTo(x + r, y + h);
+    ctx.arcTo(x, y + h, x, y + h - r, r); ctx.lineTo(x, y + r);
+    ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
+  }
+  function txt(s: string, x: number, y: number, font = '12px Arial', color = '#1c1c2e', align: CanvasTextAlign = 'left', maxW?: number) {
+    ctx.save(); ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+    maxW !== undefined ? ctx.fillText(s, x, y, maxW) : ctx.fillText(s, x, y); ctx.restore();
+  }
+
+  // Background
+  ctx.fillStyle = '#f8fafc'; ctx.fillRect(0, 0, W, totalH);
+
+  // HEADER
+  const hGrad = ctx.createLinearGradient(0, 0, W, H_HEADER);
+  hGrad.addColorStop(0, '#16387a'); hGrad.addColorStop(1, '#091628');
+  ctx.fillStyle = hGrad; ctx.fillRect(0, 0, W, H_HEADER);
+  ctx.fillStyle = '#f59e0b'; ctx.fillRect(0, H_HEADER - 4, W, 4);
+  const LOGO_H = 68, LY = (H_HEADER - 4 - LOGO_H) / 2;
+  let logoDrawW = 0;
+  if (logo) {
+    const ls = LOGO_H / (logo.naturalHeight || logo.height);
+    logoDrawW = (logo.naturalWidth || logo.width) * ls;
+    ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+    ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 14;
+    ctx.drawImage(logo, PAD, LY, logoDrawW, LOGO_H); ctx.restore();
+  }
+  const TX = PAD + (logo ? logoDrawW + 14 : 0);
+  txt('CGB ENERGIA', TX, H_HEADER / 2 - 2, 'bold 24px Arial', '#ffffff');
+  txt('Monitoramento de Saídas de Campo', TX, H_HEADER / 2 + 18, '12px Arial', 'rgba(255,255,255,0.6)');
+  txt(new Date().toLocaleDateString('pt-BR'), W - PAD, 28, '11px Arial', 'rgba(255,255,255,0.5)', 'right');
+
+  let y = H_HEADER;
+
+  // SUBTITLE
+  ctx.fillStyle = '#1e3a5f'; ctx.fillRect(0, y, W, H_SUBTIT);
+  txt(`Horários — Semana ${dias[0]!.numDia}/${dias[0]!.str.slice(5, 7)} a ${dias[6]!.numDia}/${dias[6]!.str.slice(5, 7)}`,
+    PAD, y + H_SUBTIT / 2 + 5, 'bold 14px Arial', '#ffffff');
+  y += H_SUBTIT;
+
+  // COLUMN HEADERS
+  ctx.fillStyle = '#dde3ef'; ctx.fillRect(0, y, W, H_COL_HDR);
+  txt('Equipe', PAD + 6, y + H_COL_HDR / 2 + 4, 'bold 10px Arial', '#475569');
+  dias.forEach((dia, i) => {
+    const cx = PAD + LABEL_W + i * CELL_W + CELL_W / 2;
+    if (dia.ehHoje) { ctx.fillStyle = '#1e3a5f'; ctx.fillRect(PAD + LABEL_W + i * CELL_W, y, CELL_W, H_COL_HDR); }
+    txt(dia.nomeCurto.toUpperCase(), cx, y + 13, 'bold 9px Arial', dia.ehHoje ? 'rgba(255,255,255,0.7)' : '#64748b', 'center');
+    txt(String(dia.numDia), cx, y + 27, 'bold 13px Arial', dia.ehHoje ? '#f59e0b' : '#334155', 'center');
+  });
+  ctx.fillStyle = '#94a3b8'; ctx.fillRect(0, y + H_COL_HDR - 1, W, 1);
+  y += H_COL_HDR;
+
+  // BASES
+  for (const grupo of grupos) {
+    const baseStartY = y;
+
+    // Base header
+    const bGrad = ctx.createLinearGradient(0, y, W, y + BASE_HEAD_H);
+    bGrad.addColorStop(0, '#1e40af'); bGrad.addColorStop(1, '#1e3a5f');
+    ctx.fillStyle = bGrad; ctx.fillRect(0, y, W, BASE_HEAD_H);
+    txt(grupo.baseNome.toUpperCase(), PAD + 10, y + BASE_HEAD_H / 2 + 5, 'bold 12px Arial', '#ffffff');
+
+    // Week stat badges
+    const allCells = grupo.equipes.flatMap((e) => e.celulas);
+    const cnt = { no_prazo: 0, atrasado: 0, justificado: 0, vazio: 0 };
+    for (const c of allCells) { if (c.status in cnt) (cnt as Record<string, number>)[c.status]++; }
+    let bx = W - PAD - 4;
+    const drawBadge = (label: string, bg: string) => {
+      ctx.save(); ctx.font = 'bold 9px Arial';
+      const bw = ctx.measureText(label).width + 10, bh = 16;
+      rr(bx - bw, y + (BASE_HEAD_H - bh) / 2, bw, bh, 3);
+      ctx.fillStyle = bg; ctx.fill();
+      ctx.fillStyle = '#fff'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+      ctx.fillText(label, bx - bw / 2, y + BASE_HEAD_H / 2);
+      ctx.restore(); bx -= bw + 5;
+    };
+    if (cnt.vazio > 0) drawBadge(`${cnt.vazio} s/reg`, '#64748b');
+    if (cnt.justificado > 0) drawBadge(`${cnt.justificado} just.`, '#0891b2');
+    if (cnt.atrasado > 0) drawBadge(`${cnt.atrasado} atras.`, '#b91c1c');
+    if (cnt.no_prazo > 0) drawBadge(`${cnt.no_prazo} ok`, '#15803d');
+    y += BASE_HEAD_H;
+
+    // Team rows
+    grupo.equipes.forEach((eq, ri) => {
+      const ry = y + ri * ROW_H;
+      ctx.fillStyle = ri % 2 === 1 ? '#f1f5f9' : '#ffffff';
+      ctx.fillRect(0, ry, W, ROW_H);
+      txt(eq.identificador, PAD + 6, ry + ROW_H / 2 + 4, 'bold 10px Arial', '#334155', 'left', LABEL_W - 10);
+
+      eq.celulas.forEach((cel, i) => {
+        const cx = PAD + LABEL_W + i * CELL_W;
+        const dia = dias[i]!;
+        if (dia.ehHoje) { ctx.fillStyle = 'rgba(30,58,95,0.07)'; ctx.fillRect(cx, ry, CELL_W, ROW_H); }
+        const ix = cx + 2, iy = ry + 3, iw = CELL_W - 4, ih = ROW_H - 6;
+        const tcx = cx + CELL_W / 2;
+        if (cel.status === 'no_prazo') {
+          ctx.fillStyle = '#16a34a'; rr(ix, iy, iw, ih, 3); ctx.fill();
+          txt(cel.hora!, tcx, ry + ROW_H / 2 + 4, 'bold 10px Arial', '#fff', 'center');
+        } else if (cel.status === 'atrasado') {
+          ctx.fillStyle = '#dc2626'; rr(ix, iy, iw, ih, 3); ctx.fill();
+          txt(cel.hora!, tcx, ry + ROW_H / 2 + 4, 'bold 10px Arial', '#fff', 'center');
+        } else if (cel.status === 'justificado') {
+          ctx.fillStyle = '#d97706'; rr(ix, iy, iw, ih, 3); ctx.fill();
+          txt('JUST', tcx, ry + ROW_H / 2 + 4, 'bold 9px Arial', '#fff', 'center');
+        }
+      });
+      ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, ry + ROW_H - 1, W, 1);
+    });
+
+    // Column separators
+    const secH = BASE_HEAD_H + grupo.equipes.length * ROW_H;
+    ctx.fillStyle = '#94a3b8'; ctx.fillRect(PAD + LABEL_W, baseStartY, 1, secH);
+    for (let i = 1; i < 7; i++) {
+      ctx.fillStyle = '#dde3ef';
+      ctx.fillRect(PAD + LABEL_W + i * CELL_W, baseStartY + BASE_HEAD_H, 1, grupo.equipes.length * ROW_H);
+    }
+
+    y += grupo.equipes.length * ROW_H + BASE_GAP;
+  }
+
+  // LEGEND
+  y += 4;
+  const legendItems: [string, string, boolean][] = [
+    ['#16a34a', 'No prazo', false], ['#dc2626', 'Atrasado', false],
+    ['#d97706', 'Justificado', false], ['', 'Sem registro', true],
+  ];
+  legendItems.forEach(([col, lab, outline], i) => {
+    const lx = PAD + i * 148;
+    if (outline) { ctx.strokeStyle = '#94a3b8'; ctx.lineWidth = 1; rr(lx, y + 3, 14, 14, 3); ctx.stroke(); }
+    else { ctx.fillStyle = col; rr(lx, y + 3, 14, 14, 3); ctx.fill(); }
+    txt(lab, lx + 19, y + 14, '11px Arial', '#6b7280');
+  });
+  y += H_LEGEND;
+
+  // FOOTER
+  ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, totalH - H_FOOTER, W, H_FOOTER);
+  txt('Gerado automaticamente · TimeTrack · CGB Engenharia', W / 2, totalH - H_FOOTER / 2 + 5, '11px Arial', '#94a3b8', 'center');
+
+  const nome = `heatmap-${dias[0]!.str}-a-${dias[6]!.str}.png`;
+  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
+  if (!blob) return;
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = nome; a.click();
+  URL.revokeObjectURL(url);
+  $q.notify({ type: 'positive', message: 'Imagem do heatmap gerada!' });
+}
+
+async function exportarGrafico() {
+  if (exportando.value) return;
   exportando.value = true;
   try {
-    // Esconde os controles (toggle/botão) durante a captura, só o gráfico + título aparecem na imagem.
+    if (visaoGrafico.value === 'heatmap') { await exportarHeatmapCanvas(); return; }
+
+    const cardEl = graficoCardEl.value?.$el;
+    if (!cardEl) return;
     await nextTick();
     const corFundo = getComputedStyle(cardEl).backgroundColor;
     const canvas = await html2canvas(cardEl, { backgroundColor: corFundo, scale: 2 });
@@ -1846,12 +2023,9 @@ async function exportarGrafico() {
     if (!blob) return;
 
     const nomeArquivo = `timetrack-${visaoGrafico.value}-${data.value}.png`;
-
     const url = URL.createObjectURL(blob);
     const link = document.createElement('a');
-    link.href = url;
-    link.download = nomeArquivo;
-    link.click();
+    link.href = url; link.download = nomeArquivo; link.click();
     URL.revokeObjectURL(url);
   } finally {
     exportando.value = false;
