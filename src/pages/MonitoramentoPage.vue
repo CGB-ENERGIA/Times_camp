@@ -6,7 +6,7 @@
 
       <!-- Navegador de semana -->
       <div class="row items-center no-wrap semana-nav">
-        <q-btn flat dense round icon="chevron_left" @click="semanaOffset--; carregarManual()" />
+        <q-btn flat dense round icon="chevron_left" @click="moverSemana(-1); carregarManual()" />
         <q-btn
           v-for="dia in diasDaSemana"
           :key="dia.str"
@@ -19,14 +19,29 @@
             <span class="dia-btn-num">{{ dia.numDia }}</span>
           </div>
         </q-btn>
-        <q-btn flat dense round icon="chevron_right" @click="semanaOffset++; carregarManual()" />
+        <q-btn flat dense round icon="chevron_right" @click="moverSemana(1); carregarManual()" />
+        <!-- Seletor de data de início do intervalo -->
+        <q-btn flat dense round icon="event" class="q-ml-xs">
+          <q-popup-proxy cover transition-show="scale" transition-hide="scale">
+            <q-date
+              :model-value="dataInicioHm"
+              @update:model-value="(v) => { dataInicioHm = String(v); }"
+              mask="YYYY-MM-DD"
+              title="Início do intervalo"
+            >
+              <div class="row items-center justify-end">
+                <q-btn v-close-popup label="Fechar" color="primary" flat />
+              </div>
+            </q-date>
+          </q-popup-proxy>
+        </q-btn>
         <q-btn
-          v-if="semanaOffset !== 0"
+          v-if="!estaHojeSemana"
           flat dense no-caps size="sm"
           label="Hoje"
           color="primary"
           class="q-ml-xs"
-          @click="semanaOffset = 0; data = hojeStr(); carregarManual()"
+          @click="dataInicioHm = segundaAtual(); data = hojeStr(); carregarManual()"
         />
       </div>
 
@@ -540,24 +555,35 @@ const tipos = ['GERE', 'GOMAN', 'GSTC'];
 const $q = useQuasar();
 
 const data = ref(hojeStr());
-const semanaOffset = ref(0);
-
 const NOMES_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
 
-const diasDaSemana = computed(() => {
+function segundaAtual(): string {
   const hoje = new Date();
-  const diaSemana = hoje.getDay(); // 0=Dom, 1=Seg, ...
+  const diaSemana = hoje.getDay();
   const segunda = new Date(hoje);
-  // retrocede até segunda-feira da semana
-  segunda.setDate(hoje.getDate() - (diaSemana === 0 ? 6 : diaSemana - 1) + semanaOffset.value * 7);
+  segunda.setDate(hoje.getDate() - (diaSemana === 0 ? 6 : diaSemana - 1));
+  return segunda.toLocaleDateString('en-CA');
+}
 
+const dataInicioHm = ref<string>(segundaAtual());
+
+const diasDaSemana = computed(() => {
+  const inicio = new Date(dataInicioHm.value + 'T00:00:00');
   return NOMES_SEMANA.map((nomeCurto, i) => {
-    const d = new Date(segunda);
-    d.setDate(segunda.getDate() + i);
+    const d = new Date(inicio);
+    d.setDate(inicio.getDate() + i);
     const str = d.toLocaleDateString('en-CA');
     return { str, nomeCurto, numDia: d.getDate(), ehHoje: str === hojeStr() };
   });
 });
+
+function moverSemana(delta: number) {
+  const d = new Date(dataInicioHm.value + 'T00:00:00');
+  d.setDate(d.getDate() + delta * 7);
+  dataInicioHm.value = d.toLocaleDateString('en-CA');
+}
+
+const estaHojeSemana = computed(() => dataInicioHm.value === segundaAtual());
 
 const resposta = ref<MonitoramentoResponse | null>(null);
 const carregando = ref(false);
@@ -872,8 +898,8 @@ watch(visaoGrafico, (v) => {
   if (v === 'heatmap') void carregarHeatmapSemana();
 });
 
-// Recarrega heatmap ao mudar semana
-watch(semanaOffset, () => {
+// Recarrega heatmap ao mudar intervalo
+watch(dataInicioHm, () => {
   if (visaoGrafico.value === 'heatmap') void carregarHeatmapSemana();
 });
 
