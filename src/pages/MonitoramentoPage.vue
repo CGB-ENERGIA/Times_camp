@@ -1556,7 +1556,7 @@ async function exportarDetalhe() {
         const isExpurgo = eq.equipeId === expMin?.equipeId || eq.equipeId === expMax?.equipeId;
         const ehMin = eq.equipeId === expMin?.equipeId;
         const ehMax = eq.equipeId === expMax?.equipeId;
-        const cor = isExpurgo ? '#94a3b8' : eq.status === 'no_prazo' ? '#16a34a' : eq.status === 'atrasado' ? '#dc2626' : '#9ca3af';
+        const cor = isExpurgo ? '#94a3b8' : eq.status === 'no_prazo' ? '#16a34a' : eq.status === 'atrasado' ? '#dc2626' : eq.status === 'justificado' ? '#d97706' : '#9ca3af';
 
         // fundo: expurgos têm fundo acinzentado especial
         ctx.fillStyle = isExpurgo ? '#e2e8f0' : row % 2 === 0 ? '#ffffff' : '#f1f5f9';
@@ -1589,6 +1589,8 @@ async function exportarDetalhe() {
           if (!isExpurgo && eq.atrasoMin) {
             txt(`+${eq.atrasoMin}m`, x0 + COL_W - 6, y0 + ROW_H / 2 + 4, 'bold 10px Arial', '#dc2626', 'right');
           }
+        } else if (eq.status === 'justificado') {
+          txt('justificado', x0 + COL_W - 10, y0 + ROW_H / 2 + 4, 'bold 11px Arial', '#d97706', 'right');
         } else {
           txt('pendente', x0 + COL_W - 10, y0 + ROW_H / 2 + 4, '11px Arial', '#9ca3af', 'right');
         }
