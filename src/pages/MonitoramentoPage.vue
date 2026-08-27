@@ -2130,7 +2130,7 @@ onUnmounted(() => {
 }
 
 .heatmap-col-hoje {
-  background: rgba(25, 118, 210, 0.07) !important;
+  background: rgba(25, 118, 210, 0.07);
   border-left: 2px solid rgba(25, 118, 210, 0.4) !important;
   border-right: 2px solid rgba(25, 118, 210, 0.4) !important;
 }
