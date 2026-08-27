@@ -1925,10 +1925,15 @@ async function exportarHeatmapCanvas() {
     ctx.fillStyle = bGrad; ctx.fillRect(0, y, W, BASE_HEAD_H);
     txt(grupo.baseNome.toUpperCase(), PAD + 10, y + BASE_HEAD_H / 2 + 5, 'bold 12px Arial', '#ffffff');
 
-    // Week stat badges
-    const allCells = grupo.equipes.flatMap((e) => e.celulas);
+    // Week stat badges (s/reg ignores Sat/Sun)
+    const isWeekend = (i: number) => { const dw = new Date(dias[i]!.str + 'T00:00:00').getDay(); return dw === 0 || dw === 6; };
     const cnt = { no_prazo: 0, atrasado: 0, justificado: 0, vazio: 0 };
-    for (const c of allCells) { if (c.status in cnt) (cnt as Record<string, number>)[c.status]++; }
+    for (const eq of grupo.equipes) {
+      eq.celulas.forEach((c, i) => {
+        if (c.status in cnt && !(c.status === 'vazio' && isWeekend(i)))
+          (cnt as Record<string, number>)[c.status]++;
+      });
+    }
     let bx = W - PAD - 4;
     const drawBadge = (label: string, bg: string) => {
       ctx.save(); ctx.font = 'bold 9px Arial';
