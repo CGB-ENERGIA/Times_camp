@@ -45,6 +45,14 @@
           icon="warning"
           @click="alternarStatus('atrasado')"
         >{{ statsAnim.atrasado }} atrasada(s)</q-chip>
+        <q-chip
+          clickable square
+          :outline="!statusFiltro.includes('justificado')"
+          color="info"
+          :text-color="statusFiltro.includes('justificado') ? 'white' : 'info'"
+          icon="description"
+          @click="alternarStatus('justificado')"
+        >{{ statsAnim.justificado }} justificada(s)</q-chip>
 
         <q-space />
 
@@ -301,6 +309,7 @@
               <span class="text-subtitle2">{{ base.baseNome }}</span>
               <q-badge color="positive" :label="`${base.stats.no_prazo} no prazo`" />
               <q-badge v-if="base.stats.atrasado > 0" color="negative" :label="`${base.stats.atrasado} atrasada(s)`" />
+              <q-badge v-if="base.stats.justificado > 0" color="info" :label="`${base.stats.justificado} justificada(s)`" />
               <q-badge v-if="base.stats.pendente > 0" color="grey-6" :label="`${base.stats.pendente} pendente(s)`" />
             </div>
             <div class="row q-gutter-xs">
@@ -309,7 +318,7 @@
                 :key="eq.equipeId"
                 class="equipe-chip"
                 :style="{ borderColor: CORES[eq.status], background: `${CORES[eq.status]}22` }"
-                :title="`${eq.identificador} · ${eq.horaSaida ? eq.horaSaida.slice(0,5) : 'Pendente'}${eq.atrasoMin ? ` · +${eq.atrasoMin}min` : ''}`"
+                :title="`${eq.identificador} · ${eq.horaSaida ? eq.horaSaida.slice(0,5) : labelStatus(eq.status)}${eq.atrasoMin ? ` · +${eq.atrasoMin}min` : ''}`"
               >
                 <span class="equipe-chip-id" :style="{ color: CORES[eq.status] }">{{ eq.identificador }}</span>
                 <span v-if="eq.horaSaida" class="equipe-chip-time">{{ eq.horaSaida.slice(0, 5) }}</span>
@@ -453,7 +462,7 @@ import { hojeStr } from '@/utils/date';
 
 ChartJS.register(...registerables);
 
-type Status = 'no_prazo' | 'atrasado' | 'pendente';
+type Status = 'no_prazo' | 'atrasado' | 'pendente' | 'justificado';
 
 // Paleta de status (verde/vermelho validados para contraste; cinza = neutro,
 // não é um "alerta"). Nunca usada sozinha — sempre junto de ícone + texto.
@@ -461,6 +470,7 @@ const CORES: Record<Status, string> = {
   no_prazo: '#0ca30c',
   atrasado: '#d03b3b',
   pendente: '#757575',
+  justificado: '#0891b2',
 };
 
 interface EquipeStatus {
@@ -750,10 +760,11 @@ const stats = computed(() => ({
   pendente: linhasParaStats.value.filter((r) => r.status === 'pendente').length,
   no_prazo: linhasParaStats.value.filter((r) => r.status === 'no_prazo').length,
   atrasado: linhasParaStats.value.filter((r) => r.status === 'atrasado').length,
+  justificado: linhasParaStats.value.filter((r) => r.status === 'justificado').length,
 }));
 
 // Contadores animados dos chips (conta subindo/descendo em vez de trocar o número seco)
-const statsAnim = reactive({ pendente: 0, no_prazo: 0, atrasado: 0 });
+const statsAnim = reactive({ pendente: 0, no_prazo: 0, atrasado: 0, justificado: 0 });
 
 watch(
   stats,
@@ -794,7 +805,7 @@ const colunas: QTableColumn[] = [
 ];
 
 function labelStatus(status: Status) {
-  return { no_prazo: 'No prazo', atrasado: 'Atrasado', pendente: 'Pendente' }[status];
+  return { no_prazo: 'No prazo', atrasado: 'Atrasado', pendente: 'Pendente', justificado: 'Justificado' }[status];
 }
 
 function corStatus(status: Status) {
@@ -826,6 +837,7 @@ const dadosGraficoBase = computed<ChartData<'bar'>>(() => {
       { label: 'Pendente', data: contarPorBase('pendente'), backgroundColor: CORES.pendente, stack: 's' },
       { label: 'No prazo', data: contarPorBase('no_prazo'), backgroundColor: CORES.no_prazo, stack: 's' },
       { label: 'Atrasado', data: contarPorBase('atrasado'), backgroundColor: CORES.atrasado, stack: 's' },
+      { label: 'Justificado', data: contarPorBase('justificado'), backgroundColor: CORES.justificado, stack: 's' },
     ],
   };
 });
@@ -973,13 +985,14 @@ const equipesPorBase = computed(() => {
     equipes: rowsFiltradas.value
       .filter((r) => r.baseNome === baseNome)
       .sort((a, b) => {
-        const order: Record<Status, number> = { no_prazo: 0, atrasado: 1, pendente: 2 };
+        const order: Record<Status, number> = { no_prazo: 0, atrasado: 1, justificado: 2, pendente: 3 };
         if (order[a.status] !== order[b.status]) return order[a.status] - order[b.status];
         return a.identificador.localeCompare(b.identificador);
       }),
     stats: {
       no_prazo: rowsFiltradas.value.filter((r) => r.baseNome === baseNome && r.status === 'no_prazo').length,
       atrasado: rowsFiltradas.value.filter((r) => r.baseNome === baseNome && r.status === 'atrasado').length,
+      justificado: rowsFiltradas.value.filter((r) => r.baseNome === baseNome && r.status === 'justificado').length,
       pendente: rowsFiltradas.value.filter((r) => r.baseNome === baseNome && r.status === 'pendente').length,
     },
   }));
@@ -1529,6 +1542,7 @@ async function exportarDetalhe() {
       };
       let rx2 = W - PAD - 6;
       if (base.stats.pendente > 0) rx2 = drawBadge2(`${base.stats.pendente} pendente(s)`, '#6b7280', rx2);
+      if (base.stats.justificado > 0) rx2 = drawBadge2(`${base.stats.justificado} justificada(s)`, '#0891b2', rx2);
       if (base.stats.atrasado > 0) rx2 = drawBadge2(`${base.stats.atrasado} atrasada(s)`, '#b91c1c', rx2);
       drawBadge2(`${base.stats.no_prazo} no prazo`, '#15803d', rx2);
       y += BASE_HEAD_H;
@@ -1778,6 +1792,10 @@ onUnmounted(() => {
 
 :deep(.row-no_prazo) {
   border-left: 3px solid var(--q-positive);
+}
+
+:deep(.row-justificado) {
+  border-left: 3px solid var(--q-info);
 }
 
 .heatmap-wrap {

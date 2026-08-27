@@ -45,6 +45,13 @@
           icon="warning"
           @click="alternarStatus('atrasado')"
         >{{ statsAnim.atrasado }} atrasada(s)</q-chip>
+        <q-chip
+          clickable square :outline="!statusFiltro.includes('justificado')"
+          color="info"
+          :text-color="statusFiltro.includes('justificado') ? 'white' : 'info'"
+          icon="description"
+          @click="alternarStatus('justificado')"
+        >{{ statsAnim.justificado }} justificada(s)</q-chip>
 
         <q-space />
 
@@ -204,7 +211,7 @@ import { api } from '@/boot/axios';
 import { useAuthStore } from '@/stores/auth';
 import { hojeStr, agoraStr } from '@/utils/date';
 
-type Status = 'no_prazo' | 'atrasado' | 'pendente';
+type Status = 'no_prazo' | 'atrasado' | 'pendente' | 'justificado';
 
 interface EquipeStatus {
   equipeId: number;
@@ -306,9 +313,10 @@ const stats = computed(() => ({
   pendente: equipesComBuscaTipo.value.filter((e) => e.status === 'pendente').length,
   no_prazo: equipesComBuscaTipo.value.filter((e) => e.status === 'no_prazo').length,
   atrasado: equipesComBuscaTipo.value.filter((e) => e.status === 'atrasado').length,
+  justificado: equipesComBuscaTipo.value.filter((e) => e.status === 'justificado').length,
 }));
 
-const statsAnim = reactive({ pendente: 0, no_prazo: 0, atrasado: 0 });
+const statsAnim = reactive({ pendente: 0, no_prazo: 0, atrasado: 0, justificado: 0 });
 
 watch(
   stats,
@@ -353,11 +361,11 @@ const motivoJust = ref('');
 const salvandoJust = ref(false);
 
 function corStatus(status: Status) {
-  return { no_prazo: 'positive', atrasado: 'negative', pendente: 'grey-6' }[status];
+  return { no_prazo: 'positive', atrasado: 'negative', pendente: 'grey-6', justificado: 'info' }[status];
 }
 
 function labelStatus(status: Status) {
-  return { no_prazo: 'No prazo', atrasado: 'Atrasado', pendente: 'Pendente' }[status];
+  return { no_prazo: 'No prazo', atrasado: 'Atrasado', pendente: 'Pendente', justificado: 'Justificado' }[status];
 }
 
 function alternarStatus(status: Status) {
@@ -463,7 +471,8 @@ onMounted(async () => {
 </script>
 
 <style scoped>
-:deep(.row-atrasado) { border-left: 3px solid var(--q-negative); }
-:deep(.row-pendente)  { border-left: 3px solid rgba(158,158,158,0.5); }
-:deep(.row-no_prazo)  { border-left: 3px solid var(--q-positive); }
+:deep(.row-atrasado)    { border-left: 3px solid var(--q-negative); }
+:deep(.row-pendente)    { border-left: 3px solid rgba(158,158,158,0.5); }
+:deep(.row-no_prazo)    { border-left: 3px solid var(--q-positive); }
+:deep(.row-justificado) { border-left: 3px solid var(--q-info); }
 </style>

@@ -55,7 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         registradoPor: string | null;
         justificativaId: number | null;
         justificativa: string | null;
-        status: 'no_prazo' | 'atrasado' | 'pendente';
+        status: 'no_prazo' | 'atrasado' | 'pendente' | 'justificado';
       }>;
     }
   >();
@@ -69,8 +69,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       });
     }
 
-    const status: 'no_prazo' | 'atrasado' | 'pendente' = !linha.hora_saida
-      ? 'pendente'
+    const status: 'no_prazo' | 'atrasado' | 'pendente' | 'justificado' = !linha.hora_saida
+      ? (linha.justificativa_id ? 'justificado' : 'pendente')
       : linha.hora_saida <= linha.horario_padrao_saida
         ? 'no_prazo'
         : 'atrasado';
