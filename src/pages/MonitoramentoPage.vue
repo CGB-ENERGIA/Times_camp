@@ -1852,7 +1852,26 @@ async function exportarHeatmapCanvas() {
   const H_LEGEND = 40, H_FOOTER = 38;
   const LABEL_W = 155, CELL_W = Math.floor((IW - LABEL_W) / 7);
 
-  let totalH = H_HEADER + H_SUBTIT + H_COL_HDR + H_LEGEND + H_FOOTER;
+  // Helper de média com expurgo para strings HH:MM
+  function mediaHm(horas: string[]) {
+    if (!horas.length) return { media: null as number | null, count: 0, minH: null as string | null, maxH: null as string | null };
+    const sorted = [...horas].sort((a, b) => toMinutos(a) - toMinutos(b));
+    if (sorted.length <= 2) {
+      const soma = sorted.reduce((s, h) => s + toMinutos(h), 0);
+      return { media: Math.round(soma / sorted.length), count: sorted.length, minH: null, maxH: null };
+    }
+    const minH = sorted[0]!, maxH = sorted[sorted.length - 1]!;
+    const restantes = sorted.slice(1, -1);
+    const soma = restantes.reduce((s, h) => s + toMinutos(h), 0);
+    return { media: Math.round(soma / restantes.length), count: restantes.length, minH, maxH };
+  }
+
+  const CARD_H = 58, CARD_GAP = 8, CARDS_COL = 3;
+  const CARD_W = Math.floor((IW - (CARDS_COL - 1) * CARD_GAP) / CARDS_COL);
+  const n_base_rows = Math.ceil(grupos.length / CARDS_COL);
+  const H_RESUMO = 36 + 72 + 16 + n_base_rows * (CARD_H + CARD_GAP) + 16;
+
+  let totalH = H_HEADER + H_SUBTIT + H_COL_HDR + H_LEGEND + H_FOOTER + H_RESUMO;
   for (const g of grupos) totalH += BASE_HEAD_H + g.equipes.length * ROW_H + BASE_GAP;
 
   const canvas = document.createElement('canvas');
@@ -1988,8 +2007,66 @@ async function exportarHeatmapCanvas() {
     y += grupo.equipes.length * ROW_H + BASE_GAP;
   }
 
-  // LEGEND
+  // === RESUMO DA SEMANA ===
   y += 4;
+
+  // separador
+  ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, y, W, 1); y += 1;
+
+  // Cabeçalho da seção
+  ctx.fillStyle = '#1e3a5f'; ctx.fillRect(0, y, W, 36);
+  txt('RESUMO DA SEMANA — MÉDIA DE SAÍDA (COM EXPURGO)', PAD + 10, y + 24, 'bold 11px Arial', '#ffffff');
+  y += 36;
+
+  // Calcula médias
+  const todasHorasGeral = grupos.flatMap(g => g.equipes.flatMap(e => e.celulas.filter(c => c.hora).map(c => c.hora!)));
+  const mgeral = mediaHm(todasHorasGeral);
+  const LIMITE_MIN = 510; // 08:30
+
+  // Card média geral
+  const geralOk = mgeral.media !== null && mgeral.media <= LIMITE_MIN;
+  const geralCor = mgeral.media === null ? '#94a3b8' : geralOk ? '#15803d' : '#b91c1c';
+  const geralBg = mgeral.media === null ? '#f8fafc' : geralOk ? '#f0fdf4' : '#fff5f5';
+  ctx.fillStyle = geralBg; ctx.fillRect(PAD, y, IW, 72);
+  ctx.fillStyle = geralCor; ctx.fillRect(PAD, y, 5, 72);
+  ctx.strokeStyle = geralOk ? '#86efac' : mgeral.media === null ? '#e2e8f0' : '#fca5a5';
+  ctx.lineWidth = 1; ctx.strokeRect(PAD, y, IW, 72);
+  txt('MÉDIA GERAL', PAD + 16, y + 20, 'bold 9px Arial', '#64748b');
+  txt(mgeral.media !== null ? formatarMinutos(mgeral.media) : '—', PAD + 16, y + 56, 'bold 34px Arial', geralCor);
+  if (mgeral.media !== null) {
+    txt(`${mgeral.count} registros (expurgo: ↓${mgeral.minH ?? '—'} ↑${mgeral.maxH ?? '—'})`,
+      PAD + 130, y + 32, '10px Arial', '#64748b');
+    txt(geralOk ? '✓ Dentro do limite (08:30)' : '✗ Acima do limite (08:30)',
+      PAD + 130, y + 52, 'bold 11px Arial', geralCor);
+  }
+  y += 72 + 16;
+
+  // Cards por base
+  const baseMedias = grupos.map(g => {
+    const horas = g.equipes.flatMap(e => e.celulas.filter(c => c.hora).map(c => c.hora!));
+    return { nome: g.baseNome, ...mediaHm(horas) };
+  });
+
+  let cardX = PAD, cardY = y, cardCol = 0;
+  for (const bm of baseMedias) {
+    const ok = bm.media !== null && bm.media <= LIMITE_MIN;
+    const cor = bm.media === null ? '#94a3b8' : ok ? '#15803d' : '#b91c1c';
+    const bg = bm.media === null ? '#f8fafc' : ok ? '#f0fdf4' : '#fff5f5';
+    ctx.fillStyle = bg; rr(cardX, cardY, CARD_W, CARD_H, 6); ctx.fill();
+    ctx.fillStyle = cor; ctx.fillRect(cardX, cardY + 8, 4, CARD_H - 16);
+    ctx.strokeStyle = ok ? '#d1fae5' : bm.media === null ? '#e2e8f0' : '#fee2e2';
+    ctx.lineWidth = 1; rr(cardX, cardY, CARD_W, CARD_H, 6); ctx.stroke();
+    txt(bm.nome, cardX + 14, cardY + 18, 'bold 10px Arial', '#374151', 'left', CARD_W - 18);
+    txt(bm.media !== null ? formatarMinutos(bm.media) : 'Sem dados', cardX + 14, cardY + 44, 'bold 18px Arial', cor);
+    if (bm.media !== null) txt(`${bm.count} reg.`, cardX + CARD_W - 8, cardY + 44, '9px Arial', '#9ca3af', 'right');
+    cardX += CARD_W + CARD_GAP;
+    cardCol++;
+    if (cardCol >= CARDS_COL) { cardCol = 0; cardX = PAD; cardY += CARD_H + CARD_GAP; }
+  }
+  if (cardCol > 0) cardY += CARD_H + CARD_GAP;
+  y = cardY + 8;
+
+  // LEGEND
   const legendItems: [string, string, boolean][] = [
     ['#16a34a', 'No prazo', false], ['#dc2626', 'Atrasado', false],
     ['#fbbf24', 'Justificado', false], ['', 'Sem registro', true],
