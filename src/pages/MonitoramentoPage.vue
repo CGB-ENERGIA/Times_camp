@@ -1961,8 +1961,8 @@ async function exportarHeatmapCanvas() {
           ctx.fillStyle = '#dc2626'; rr(ix, iy, iw, ih, 3); ctx.fill();
           txt(cel.hora!, tcx, ry + ROW_H / 2 + 4, 'bold 10px Arial', '#fff', 'center');
         } else if (cel.status === 'justificado') {
-          ctx.fillStyle = '#d97706'; rr(ix, iy, iw, ih, 3); ctx.fill();
-          txt('JUST', tcx, ry + ROW_H / 2 + 4, 'bold 9px Arial', '#fff', 'center');
+          ctx.fillStyle = '#fbbf24'; rr(ix, iy, iw, ih, 3); ctx.fill();
+          txt('JUSTIFICADO', tcx, ry + ROW_H / 2 + 4, 'bold 8px Arial', '#78350f', 'center');
         }
       });
       ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, ry + ROW_H - 1, W, 1);
@@ -1983,7 +1983,7 @@ async function exportarHeatmapCanvas() {
   y += 4;
   const legendItems: [string, string, boolean][] = [
     ['#16a34a', 'No prazo', false], ['#dc2626', 'Atrasado', false],
-    ['#d97706', 'Justificado', false], ['', 'Sem registro', true],
+    ['#fbbf24', 'Justificado', false], ['', 'Sem registro', true],
   ];
   legendItems.forEach(([col, lab, outline], i) => {
     const lx = PAD + i * 148;
