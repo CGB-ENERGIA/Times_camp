@@ -1,9 +1,35 @@
 <template>
   <q-page class="q-pa-md">
-    <div class="row items-center q-gutter-md q-mb-md">
+    <div class="row items-center q-gutter-sm q-mb-md flex-wrap">
       <div class="text-h6">Monitoramento de Saída</div>
       <q-space />
-      <q-input v-model="data" type="date" dense filled style="width: 170px" @update:model-value="carregarManual" />
+
+      <!-- Navegador de semana -->
+      <div class="row items-center no-wrap semana-nav">
+        <q-btn flat dense round icon="chevron_left" @click="semanaOffset--; carregarManual()" />
+        <q-btn
+          v-for="dia in diasDaSemana"
+          :key="dia.str"
+          flat dense no-caps
+          :class="['dia-btn', data === dia.str ? 'dia-btn-ativo' : '', dia.ehHoje ? 'dia-btn-hoje' : '']"
+          @click="data = dia.str; carregarManual()"
+        >
+          <div class="column items-center" style="line-height:1.1">
+            <span class="dia-btn-nome">{{ dia.nomeCurto }}</span>
+            <span class="dia-btn-num">{{ dia.numDia }}</span>
+          </div>
+        </q-btn>
+        <q-btn flat dense round icon="chevron_right" @click="semanaOffset++; carregarManual()" />
+        <q-btn
+          v-if="semanaOffset !== 0"
+          flat dense no-caps size="sm"
+          label="Hoje"
+          color="primary"
+          class="q-ml-xs"
+          @click="semanaOffset = 0; data = hojeStr(); carregarManual()"
+        />
+      </div>
+
       <q-btn round dense flat icon="refresh" :loading="carregando" @click="carregarManual" />
       <q-btn
         v-if="todasEquipes.length > 0"
@@ -179,7 +205,10 @@
           </template>
 
           <template v-else>
-            <div v-if="rowsHeatmap.length === 0" class="text-grey-6 text-center q-pa-lg">
+            <div v-if="carregandoHm" class="flex flex-center q-pa-lg">
+              <q-spinner color="primary" size="32px" />
+            </div>
+            <div v-else-if="rowsHeatmapSemana.length === 0" class="text-grey-6 text-center q-pa-lg">
               Nenhum dado com os filtros atuais.
             </div>
             <div v-else class="heatmap-wrap">
@@ -188,39 +217,33 @@
                   <tr>
                     <th class="heatmap-corner">Equipe</th>
                     <th
-                      v-for="col in colunasHeatmap"
-                      :key="col.minutos"
+                      v-for="dia in diasDaSemana"
+                      :key="dia.str"
                       class="heatmap-col-header"
-                      :class="{ 'heatmap-limite': col.ehLimite }"
-                    >{{ col.label }}</th>
-                    <th class="heatmap-col-header heatmap-col-status">Status</th>
+                      :class="{ 'heatmap-col-hoje': dia.ehHoje }"
+                    >
+                      <div>{{ dia.nomeCurto }}</div>
+                      <div class="heatmap-col-num">{{ dia.numDia }}</div>
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
-                  <template v-for="grupo in rowsHeatmap" :key="grupo.baseNome">
+                  <template v-for="grupo in rowsHeatmapSemana" :key="grupo.baseNome">
                     <tr class="heatmap-base-row">
-                      <th :colspan="colunasHeatmap.length + 2">{{ grupo.baseNome }}</th>
+                      <th :colspan="9">{{ grupo.baseNome }}</th>
                     </tr>
-                    <tr
-                      v-for="eq in grupo.equipes"
-                      :key="eq.equipeId"
-                      :class="['heatmap-equipe-row', !eq.horaSaida ? 'heatmap-row-sem-saida' : '']"
-                    >
+                    <tr v-for="eq in grupo.equipes" :key="eq.equipeId" class="heatmap-equipe-row">
                       <td class="heatmap-equipe-id">{{ eq.identificador }}</td>
                       <td
-                        v-for="col in colunasHeatmap"
-                        :key="col.minutos"
+                        v-for="(cel, i) in eq.celulas"
+                        :key="i"
                         class="heatmap-cell"
-                        :class="{ 'heatmap-limite': col.ehLimite }"
-                        :style="celulaEquipeStyle(eq, col.minutos)"
-                        :title="celulaEquipeTitulo(eq, col)"
-                      >{{ celulaEquipeTexto(eq, col.minutos) }}</td>
-                      <td class="heatmap-cell heatmap-cell-status">
-                        <span
-                          v-if="!eq.horaSaida"
-                          class="heatmap-status-label"
-                          :style="{ color: eq.status === 'justificado' ? '#d97706' : '#9ca3af' }"
-                        >{{ labelStatus(eq.status) }}</span>
+                        :class="{ 'heatmap-col-hoje': cel.ehHoje }"
+                        :style="cel.status !== 'vazio' && cel.status !== 'justificado' ? { background: CORES[cel.status as Status], color: '#fff' } : {}"
+                        :title="`${eq.identificador} · ${diasDaSemana[i]?.nomeCurto} ${diasDaSemana[i]?.numDia}${cel.hora ? ' · ' + cel.hora : ''}`"
+                      >
+                        <span v-if="cel.hora" style="font-weight:600">{{ cel.hora }}</span>
+                        <span v-else-if="cel.status === 'justificado'" style="color:#d97706;font-size:0.68rem;font-weight:700">JUST</span>
                       </td>
                     </tr>
                   </template>
@@ -231,9 +254,7 @@
               <span><span class="heatmap-dot" style="background:#0ca30c" /> No prazo</span>
               <span><span class="heatmap-dot" style="background:#d03b3b" /> Atrasado</span>
               <span><span class="heatmap-dot" style="background:#d97706" /> Justificado</span>
-              <span><span class="heatmap-dot" style="background:#9ca3af" /> Pendente</span>
-              <q-space />
-              <span><span class="heatmap-limite-swatch" /> = coluna do limite padrão (08:30)</span>
+              <span><span class="heatmap-dot" style="background:rgba(128,128,128,0.2);border:1px solid #555" /> Sem registro</span>
             </div>
           </template>
         </q-card-section>
@@ -519,6 +540,25 @@ const tipos = ['GERE', 'GOMAN', 'GSTC'];
 const $q = useQuasar();
 
 const data = ref(hojeStr());
+const semanaOffset = ref(0);
+
+const NOMES_SEMANA = ['Seg', 'Ter', 'Qua', 'Qui', 'Sex', 'Sáb', 'Dom'];
+
+const diasDaSemana = computed(() => {
+  const hoje = new Date();
+  const diaSemana = hoje.getDay(); // 0=Dom, 1=Seg, ...
+  const segunda = new Date(hoje);
+  // retrocede até segunda-feira da semana
+  segunda.setDate(hoje.getDate() - (diaSemana === 0 ? 6 : diaSemana - 1) + semanaOffset.value * 7);
+
+  return NOMES_SEMANA.map((nomeCurto, i) => {
+    const d = new Date(segunda);
+    d.setDate(segunda.getDate() + i);
+    const str = d.toLocaleDateString('en-CA');
+    return { str, nomeCurto, numDia: d.getDate(), ehHoje: str === hojeStr() };
+  });
+});
+
 const resposta = ref<MonitoramentoResponse | null>(null);
 const carregando = ref(false);
 const conteudoEl = ref<HTMLElement | null>(null);
@@ -540,6 +580,32 @@ const supervisorFiltro = ref<string[]>([]);
 const coordenadorFiltro = ref<string[]>([]);
 const statusFiltro = ref<Status[]>([]);
 const visaoGrafico = ref<'base' | 'atraso' | 'heatmap'>('base');
+
+// ---- Heatmap semana ----
+interface SaidaHm { equipe_id: number; data: string; hora_saida: string }
+interface JustHm { equipe_id: number; data: string }
+const saidasHm = ref<SaidaHm[]>([]);
+const justHm = ref<JustHm[]>([]);
+const carregandoHm = ref(false);
+
+async function carregarHeatmapSemana() {
+  if (carregandoHm.value) return;
+  carregandoHm.value = true;
+  try {
+    const dataInicio = diasDaSemana.value[0]!.str;
+    const dataFim = diasDaSemana.value[6]!.str;
+    const [{ data: saidas }, { data: justs }] = await Promise.all([
+      api.get<SaidaHm[]>('/saidas', { params: { dataInicio, dataFim, limit: 10000 } }),
+      api.get<JustHm[]>('/justificativas', { params: { dataInicio, dataFim } }),
+    ]);
+    saidasHm.value = saidas;
+    justHm.value = justs;
+  } catch {
+    $q.notify({ type: 'negative', message: 'Erro ao carregar dados da semana' });
+  } finally {
+    carregandoHm.value = false;
+  }
+}
 
 // ---- Mapa histórico ----
 interface SaidaMapa { equipe_id: number; data: string; hora_saida: string }
@@ -690,7 +756,7 @@ const tituloGrafico = computed(
     ({
       base: 'Status por base',
       atraso: 'Atrasos (minutos após o limite)',
-      heatmap: 'Horários de saída por base',
+      heatmap: `Horários — semana ${diasDaSemana.value[0]?.numDia}/${diasDaSemana.value[0]?.str.slice(5,7)} a ${diasDaSemana.value[6]?.numDia}/${diasDaSemana.value[6]?.str.slice(5,7)}`,
     })[visaoGrafico.value],
 );
 
@@ -789,10 +855,15 @@ watch(
 );
 
 // Troca de gráfico: fade + leve deslocamento em vez de aparecer seco
-watch(visaoGrafico, () => {
+watch(visaoGrafico, (v) => {
   const el = graficoSecaoEl.value?.$el;
-  if (!el) return;
-  gsap.fromTo(el, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, ease: 'power1.out' });
+  if (el) gsap.fromTo(el, { opacity: 0, y: 8 }, { opacity: 1, y: 0, duration: 0.3, ease: 'power1.out' });
+  if (v === 'heatmap') void carregarHeatmapSemana();
+});
+
+// Recarrega heatmap ao mudar semana
+watch(semanaOffset, () => {
+  if (visaoGrafico.value === 'heatmap') void carregarHeatmapSemana();
 });
 
 const temFiltroAtivo = computed(
@@ -1050,39 +1121,31 @@ const colunasHeatmap = computed(() => {
   return cols;
 });
 
-const rowsHeatmap = computed(() => {
+const rowsHeatmapSemana = computed(() => {
+  const saidaMap = new Map<string, string>();
+  const justSet = new Set<string>();
+  for (const s of saidasHm.value) saidaMap.set(`${s.equipe_id}-${s.data}`, s.hora_saida);
+  for (const j of justHm.value) justSet.add(`${j.equipe_id}-${j.data}`);
+
   const bases = [...new Set(rowsFiltradas.value.map((r) => r.baseNome))].sort();
   return bases.map((baseNome) => ({
     baseNome,
     equipes: rowsFiltradas.value
       .filter((r) => r.baseNome === baseNome)
-      .sort((a, b) => {
-        if (a.horaSaida && b.horaSaida) return a.horaSaida.localeCompare(b.horaSaida);
-        if (a.horaSaida && !b.horaSaida) return -1;
-        if (!a.horaSaida && b.horaSaida) return 1;
-        if (a.status === 'justificado' && b.status !== 'justificado') return -1;
-        if (a.status !== 'justificado' && b.status === 'justificado') return 1;
-        return a.identificador.localeCompare(b.identificador);
-      }),
+      .sort((a, b) => a.identificador.localeCompare(b.identificador))
+      .map((eq) => ({
+        ...eq,
+        celulas: diasDaSemana.value.map((dia) => {
+          const hora = saidaMap.get(`${eq.equipeId}-${dia.str}`) ?? null;
+          const isJust = justSet.has(`${eq.equipeId}-${dia.str}`);
+          const status: Status | 'vazio' = hora
+            ? (toMinutos(hora) <= toMinutos(eq.horarioPadrao) ? 'no_prazo' : 'atrasado')
+            : isJust ? 'justificado' : 'vazio';
+          return { hora: hora ? hora.slice(0, 5) : null, status, ehHoje: dia.ehHoje };
+        }),
+      })),
   }));
 });
-
-function celulaEquipeStyle(eq: Row, bucket: number): Record<string, string> {
-  if (!eq.horaSaida) return {};
-  const b = Math.floor(toMinutos(eq.horaSaida as string) / TAMANHO_BUCKET) * TAMANHO_BUCKET;
-  if (b !== bucket) return {};
-  return { background: CORES[eq.status], color: '#fff' };
-}
-
-function celulaEquipeTexto(eq: Row, bucket: number): string {
-  if (!eq.horaSaida) return '';
-  const b = Math.floor(toMinutos(eq.horaSaida as string) / TAMANHO_BUCKET) * TAMANHO_BUCKET;
-  return b === bucket ? eq.horaSaida.slice(0, 5) : '';
-}
-
-function celulaEquipeTitulo(eq: Row, col: { label: string }): string {
-  return `${eq.identificador} · ${col.label}${eq.horaSaida ? ' · ' + eq.horaSaida.slice(0, 5) : ''}`;
-}
 
 async function exportarResumo() {
   if (exportandoResumo.value) return;
@@ -1850,6 +1913,18 @@ onUnmounted(() => {
   min-width: 88px;
 }
 
+.heatmap-col-hoje {
+  background: rgba(25, 118, 210, 0.07) !important;
+  border-left: 2px solid rgba(25, 118, 210, 0.4) !important;
+  border-right: 2px solid rgba(25, 118, 210, 0.4) !important;
+}
+
+.heatmap-col-num {
+  font-size: 0.85rem;
+  font-weight: 700;
+  color: inherit;
+}
+
 .heatmap-cell {
   min-width: 52px;
   font-size: 0.75rem;
@@ -2023,5 +2098,51 @@ onUnmounted(() => {
   border-radius: 2px;
   vertical-align: middle;
   margin-right: 3px;
+}
+
+/* ---- Navegador de semana ---- */
+.semana-nav {
+  gap: 2px;
+}
+
+.dia-btn {
+  min-width: 42px;
+  padding: 4px 6px !important;
+  border-radius: 8px !important;
+  opacity: 0.7;
+}
+
+.dia-btn:hover {
+  opacity: 1;
+  background: rgba(128, 128, 128, 0.12) !important;
+}
+
+.dia-btn-hoje .dia-btn-num {
+  color: var(--q-primary);
+  font-weight: 700;
+}
+
+.dia-btn-ativo {
+  opacity: 1;
+  background: var(--q-primary) !important;
+  color: #fff !important;
+}
+
+.dia-btn-ativo .dia-btn-nome,
+.dia-btn-ativo .dia-btn-num {
+  color: #fff !important;
+}
+
+.dia-btn-nome {
+  font-size: 0.65rem;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--q-grey-6, #9e9e9e);
+}
+
+.dia-btn-num {
+  font-size: 0.9rem;
+  font-weight: 600;
+  color: inherit;
 }
 </style>
