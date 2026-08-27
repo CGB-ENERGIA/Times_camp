@@ -179,49 +179,61 @@
           </template>
 
           <template v-else>
-            <div v-if="linhasHeatmap.length === 0" class="text-grey-6 text-center q-pa-lg">
-              Nenhuma saída registrada ainda com esses filtros.
+            <div v-if="rowsHeatmap.length === 0" class="text-grey-6 text-center q-pa-lg">
+              Nenhum dado com os filtros atuais.
             </div>
             <div v-else class="heatmap-wrap">
               <table class="heatmap-table">
                 <thead>
                   <tr>
-                    <th class="heatmap-corner">Base</th>
+                    <th class="heatmap-corner">Equipe</th>
                     <th
                       v-for="col in colunasHeatmap"
                       :key="col.minutos"
                       class="heatmap-col-header"
                       :class="{ 'heatmap-limite': col.ehLimite }"
-                    >
-                      {{ col.label }}
-                    </th>
+                    >{{ col.label }}</th>
+                    <th class="heatmap-col-header heatmap-col-status">Status</th>
                   </tr>
                 </thead>
                 <tbody>
-                  <tr v-for="linha in linhasHeatmap" :key="linha.baseNome">
-                    <th class="heatmap-row-header">{{ linha.baseNome }}</th>
-                    <td
-                      v-for="col in colunasHeatmap"
-                      :key="col.minutos"
-                      class="heatmap-cell"
-                      :class="{ 'heatmap-limite': col.ehLimite }"
-                      :style="{ background: corCelulaHeatmap(linha.porBucket[col.minutos] ?? 0) }"
-                      :title="`${linha.baseNome} · ${col.label}: ${linha.porBucket[col.minutos] ?? 0} equipe(s)`"
+                  <template v-for="grupo in rowsHeatmap" :key="grupo.baseNome">
+                    <tr class="heatmap-base-row">
+                      <th :colspan="colunasHeatmap.length + 2">{{ grupo.baseNome }}</th>
+                    </tr>
+                    <tr
+                      v-for="eq in grupo.equipes"
+                      :key="eq.equipeId"
+                      :class="['heatmap-equipe-row', !eq.horaSaida ? 'heatmap-row-sem-saida' : '']"
                     >
-                      {{ linha.porBucket[col.minutos] || '' }}
-                    </td>
-                  </tr>
+                      <td class="heatmap-equipe-id">{{ eq.identificador }}</td>
+                      <td
+                        v-for="col in colunasHeatmap"
+                        :key="col.minutos"
+                        class="heatmap-cell"
+                        :class="{ 'heatmap-limite': col.ehLimite }"
+                        :style="celulaEquipeStyle(eq, col.minutos)"
+                        :title="celulaEquipeTitulo(eq, col)"
+                      >{{ celulaEquipeTexto(eq, col.minutos) }}</td>
+                      <td class="heatmap-cell heatmap-cell-status">
+                        <span
+                          v-if="!eq.horaSaida"
+                          class="heatmap-status-label"
+                          :style="{ color: eq.status === 'justificado' ? '#d97706' : '#9ca3af' }"
+                        >{{ labelStatus(eq.status) }}</span>
+                      </td>
+                    </tr>
+                  </template>
                 </tbody>
               </table>
             </div>
-            <div class="row items-center q-gutter-sm q-mt-md">
-              <div class="text-caption text-grey-6">Menos saídas</div>
-              <div class="heatmap-legend-bar" />
-              <div class="text-caption text-grey-6">Mais saídas</div>
+            <div class="row items-center q-gutter-sm q-mt-md text-caption text-grey-6 flex-wrap">
+              <span><span class="heatmap-dot" style="background:#0ca30c" /> No prazo</span>
+              <span><span class="heatmap-dot" style="background:#d03b3b" /> Atrasado</span>
+              <span><span class="heatmap-dot" style="background:#d97706" /> Justificado</span>
+              <span><span class="heatmap-dot" style="background:#9ca3af" /> Pendente</span>
               <q-space />
-              <div class="text-caption text-grey-6">
-                <span class="heatmap-limite-swatch" /> = coluna do limite padrão (08:30)
-              </div>
+              <span><span class="heatmap-limite-swatch" /> = coluna do limite padrão (08:30)</span>
             </div>
           </template>
         </q-card-section>
@@ -1038,33 +1050,38 @@ const colunasHeatmap = computed(() => {
   return cols;
 });
 
-const linhasHeatmap = computed(() => {
-  const registrados = rowsFiltradas.value.filter((r) => r.horaSaida);
-  const bases = [...new Set(registrados.map((r) => r.baseNome))].sort();
-  return bases.map((baseNome) => {
-    const porBucket: Record<number, number> = {};
-    for (const r of registrados) {
-      if (r.baseNome !== baseNome) continue;
-      const m = toMinutos(r.horaSaida as string);
-      const bucket = Math.floor(m / TAMANHO_BUCKET) * TAMANHO_BUCKET;
-      porBucket[bucket] = (porBucket[bucket] ?? 0) + 1;
-    }
-    return { baseNome, porBucket };
-  });
+const rowsHeatmap = computed(() => {
+  const bases = [...new Set(rowsFiltradas.value.map((r) => r.baseNome))].sort();
+  return bases.map((baseNome) => ({
+    baseNome,
+    equipes: rowsFiltradas.value
+      .filter((r) => r.baseNome === baseNome)
+      .sort((a, b) => {
+        if (a.horaSaida && b.horaSaida) return a.horaSaida.localeCompare(b.horaSaida);
+        if (a.horaSaida && !b.horaSaida) return -1;
+        if (!a.horaSaida && b.horaSaida) return 1;
+        if (a.status === 'justificado' && b.status !== 'justificado') return -1;
+        if (a.status !== 'justificado' && b.status === 'justificado') return 1;
+        return a.identificador.localeCompare(b.identificador);
+      }),
+  }));
 });
 
-const maxContagemHeatmap = computed(() => {
-  let max = 0;
-  for (const linha of linhasHeatmap.value) {
-    for (const v of Object.values(linha.porBucket)) max = Math.max(max, v);
-  }
-  return max || 1;
-});
+function celulaEquipeStyle(eq: Row, bucket: number): Record<string, string> {
+  if (!eq.horaSaida) return {};
+  const b = Math.floor(toMinutos(eq.horaSaida as string) / TAMANHO_BUCKET) * TAMANHO_BUCKET;
+  if (b !== bucket) return {};
+  return { background: CORES[eq.status], color: '#fff' };
+}
 
-function corCelulaHeatmap(contagem: number): string {
-  if (contagem === 0) return 'transparent';
-  const intensidade = 0.12 + 0.78 * (contagem / maxContagemHeatmap.value);
-  return `rgba(25, 118, 210, ${intensidade.toFixed(2)})`;
+function celulaEquipeTexto(eq: Row, bucket: number): string {
+  if (!eq.horaSaida) return '';
+  const b = Math.floor(toMinutos(eq.horaSaida as string) / TAMANHO_BUCKET) * TAMANHO_BUCKET;
+  return b === bucket ? eq.horaSaida.slice(0, 5) : '';
+}
+
+function celulaEquipeTitulo(eq: Row, col: { label: string }): string {
+  return `${eq.identificador} · ${col.label}${eq.horaSaida ? ' · ' + eq.horaSaida.slice(0, 5) : ''}`;
 }
 
 async function exportarResumo() {
@@ -1819,36 +1836,75 @@ onUnmounted(() => {
 }
 
 .heatmap-corner {
-  min-width: 130px;
-}
-
-.heatmap-row-header {
+  min-width: 140px;
   text-align: left;
-  font-weight: 600;
-  min-width: 130px;
-  position: sticky;
-  left: 0;
-  background: inherit;
 }
 
 .heatmap-col-header {
   font-weight: 500;
   color: var(--q-grey-6, #9e9e9e);
+  font-size: 0.72rem;
+}
+
+.heatmap-col-status {
+  min-width: 88px;
 }
 
 .heatmap-cell {
-  min-width: 44px;
+  min-width: 52px;
+  font-size: 0.75rem;
+  font-weight: 600;
+  border-radius: 3px;
+}
+
+.heatmap-cell-status {
+  text-align: left;
+  padding-left: 10px;
+}
+
+.heatmap-status-label {
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.heatmap-base-row th {
+  text-align: left;
+  font-size: 0.8rem;
+  font-weight: 700;
+  background: rgba(25, 118, 210, 0.08);
+  border-top: 2px solid rgba(25, 118, 210, 0.25);
+  padding: 5px 10px;
+  letter-spacing: 0.03em;
+}
+
+.heatmap-equipe-row td {
+  padding: 4px 6px;
+}
+
+.heatmap-equipe-id {
+  font-family: monospace;
+  font-size: 0.72rem;
+  text-align: left;
+  white-space: nowrap;
+  padding-left: 10px !important;
+  color: var(--q-grey-8, #424242);
+}
+
+.heatmap-row-sem-saida {
+  opacity: 0.65;
 }
 
 .heatmap-limite {
   box-shadow: inset 0 0 0 2px var(--q-negative);
 }
 
-.heatmap-legend-bar {
-  width: 90px;
+.heatmap-dot {
+  display: inline-block;
+  width: 10px;
   height: 10px;
-  border-radius: 4px;
-  background: linear-gradient(90deg, rgba(25, 118, 210, 0.1), rgba(25, 118, 210, 0.9));
+  border-radius: 2px;
+  vertical-align: middle;
+  margin-right: 4px;
 }
 
 .equipe-chip {
