@@ -254,11 +254,15 @@
                         :key="i"
                         class="heatmap-cell"
                         :class="{ 'heatmap-col-hoje': cel.ehHoje }"
-                        :style="cel.status !== 'vazio' && cel.status !== 'justificado' ? { background: CORES[cel.status as Status], color: '#fff' } : {}"
+                        :style="cel.status === 'justificado'
+                          ? { background: '#fbbf24', color: '#78350f' }
+                          : cel.status !== 'vazio'
+                            ? { background: CORES[cel.status as Status], color: '#fff' }
+                            : {}"
                         :title="`${eq.identificador} · ${diasDaSemana[i]?.nomeCurto} ${diasDaSemana[i]?.numDia}${cel.hora ? ' · ' + cel.hora : ''}`"
                       >
                         <span v-if="cel.hora" style="font-weight:600">{{ cel.hora }}</span>
-                        <span v-else-if="cel.status === 'justificado'" style="color:#d97706;font-size:0.68rem;font-weight:700">JUST</span>
+                        <span v-else-if="cel.status === 'justificado'" style="font-size:0.6rem;font-weight:700;letter-spacing:0.01em">JUSTIFICADO</span>
                       </td>
                     </tr>
                   </template>
