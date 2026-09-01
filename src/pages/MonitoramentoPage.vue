@@ -509,6 +509,7 @@ import { Chart as ChartJS, registerables, type ChartData, type ChartOptions } fr
 import { Bar } from 'vue-chartjs';
 import gsap from 'gsap';
 import html2canvas from 'html2canvas';
+import { jsPDF } from 'jspdf';
 import { api } from '@/boot/axios';
 import { hojeStr } from '@/utils/date';
 
@@ -1214,7 +1215,7 @@ async function exportarResumo() {
     const PAD = 28;
     const IW = W - PAD * 2;
     const CARDS_PER_ROW = 3;
-    const CARD_H = 80;
+    const CARD_H = 96;
     const CARD_GAP = 10;
     const BAR_ITEM_H = 32;
     const SEC_H = 40;
@@ -1410,7 +1411,8 @@ async function exportarResumo() {
 
     basesComMedia.forEach((b, i) => {
       const saidas = linhas.filter((r) => r.baseNome === b && r.horaSaida);
-      const media = Math.round(saidas.reduce((a, r) => a + toMinutos(r.horaSaida!), 0) / saidas.length);
+      const { media, count, expMin, expMax } = calcMediaAjustada(saidas);
+      if (media === null) return;
       const hora = formatarMinutos(media);
       const ok = media <= 510;
       const bg = ok ? '#f0fdf4' : '#fff5f5';
@@ -1430,9 +1432,16 @@ async function exportarResumo() {
       ctx.fillStyle = cor;
       ctx.fillRect(cardX, cardY + 10, 4, CARD_H - 20);
 
-      txt(hora, cardX + 18, cardY + 42, 'bold 26px Arial', cor);
-      txt(b, cardX + 18, cardY + 60, 'bold 11px Arial', '#374151', 'left', CW - 28);
-      txt(`${saidas.length} equipe${saidas.length !== 1 ? 's' : ''}`, cardX + 18, cardY + 74, '10px Arial', '#9ca3af');
+      txt(hora, cardX + 18, cardY + 38, 'bold 26px Arial', cor);
+      txt(b, cardX + 18, cardY + 56, 'bold 11px Arial', '#374151', 'left', CW - 28);
+      txt(`${count} reg.`, cardX + 18, cardY + 70, '10px Arial', '#9ca3af');
+      if (expMin ?? expMax) {
+        const expTxt = [
+          expMin ? `↓${expMin.horaSaida!.slice(0, 5)}` : '',
+          expMax ? `↑${expMax.horaSaida!.slice(0, 5)}` : '',
+        ].filter(Boolean).join('  ');
+        txt(`Expurgo: ${expTxt}`, cardX + 18, cardY + 84, '9px Arial', '#94a3b8');
+      }
 
       cardX += CW + CARD_GAP;
       if ((i + 1) % CARDS_PER_ROW === 0) { cardX = PAD; cardY += CARD_H + CARD_GAP; }
@@ -2089,14 +2098,14 @@ async function exportarHeatmapCanvas() {
   ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, totalH - H_FOOTER, W, H_FOOTER);
   txt('Gerado automaticamente · TimeTrack · CGB Engenharia', W / 2, totalH - H_FOOTER / 2 + 5, '11px Arial', '#94a3b8', 'center');
 
-  const nome = `heatmap-${dias[0]!.str}-a-${dias[6]!.str}.png`;
-  const blob = await new Promise<Blob | null>((resolve) => canvas.toBlob(resolve, 'image/png'));
-  if (!blob) return;
-  const url = URL.createObjectURL(blob);
-  const a = document.createElement('a');
-  a.href = url; a.download = nome; a.click();
-  URL.revokeObjectURL(url);
-  $q.notify({ type: 'positive', message: 'Imagem do heatmap gerada!' });
+  const imgData = canvas.toDataURL('image/jpeg', 0.97);
+  const PX_TO_MM = 25.4 / 96;
+  const pdfW = W * PX_TO_MM;
+  const pdfH = totalH * PX_TO_MM;
+  const pdf = new jsPDF({ unit: 'mm', format: [pdfW, pdfH] });
+  pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+  pdf.save(`heatmap-${dias[0]!.str}-a-${dias[6]!.str}.pdf`);
+  $q.notify({ type: 'positive', message: 'PDF do heatmap gerado!' });
 }
 
 async function exportarGrafico() {
