@@ -1542,7 +1542,17 @@ async function exportarMapa() {
     await nextTick();
     const ini = datasMapaRange.value[0];
     const fim = datasMapaRange.value[datasMapaRange.value.length - 1];
-    await capturarEl(cardEl, `mapa-historico-${ini}-a-${fim}.png`);
+    const corFundo = getComputedStyle(cardEl).backgroundColor || '#ffffff';
+    const canvas = await html2canvas(cardEl, { backgroundColor: corFundo, scale: 2, useCORS: true });
+    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const PX_TO_MM = 25.4 / 96;
+    const pdfW = canvas.width / 2 * PX_TO_MM;
+    const pdfH = canvas.height / 2 * PX_TO_MM;
+    const orient = pdfW > pdfH ? 'l' : 'p';
+    const pdf = new jsPDF({ unit: 'mm', format: [pdfW, pdfH], orientation: orient });
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+    pdf.save(`mapa-historico-${ini}-a-${fim}.pdf`);
+    $q.notify({ type: 'positive', message: 'PDF do mapa histórico gerado!' });
   } finally {
     exportandoMapa.value = false;
   }
