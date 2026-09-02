@@ -1553,21 +1553,223 @@ async function exportarMapaImagem() {
 }
 
 async function exportarMapaPdf() {
-  const cardEl = mapaCardEl.value?.$el;
-  if (!cardEl || exportandoMapaPdf.value || !mapaCarregado.value) return;
+  const rows = mapaGrid.value;
+  if (!rows.length || exportandoMapaPdf.value || !mapaCarregado.value) return;
   exportandoMapaPdf.value = true;
   try {
-    await nextTick();
-    const ini = datasMapaRange.value[0];
-    const fim = datasMapaRange.value[datasMapaRange.value.length - 1];
-    const corFundo = getComputedStyle(cardEl).backgroundColor || '#ffffff';
-    const canvas = await html2canvas(cardEl, { backgroundColor: corFundo, scale: 2, useCORS: true });
-    const imgData = canvas.toDataURL('image/jpeg', 0.92);
+    const dias = datasMapaRange.value;
+    const nDias = dias.length;
+    const hojeISO = new Date().toISOString().slice(0, 10);
+
+    // carrega logo
+    const logo = await new Promise<HTMLImageElement | null>((resolve) => {
+      const img = new Image(); img.onload = () => resolve(img); img.onerror = () => resolve(null);
+      img.src = '/icons/logo-cgb.png';
+    });
+
+    // helpers
+    const SCALE = 2;
+    const PAD = 20;
+    const PREFIX_W = 128;
+    const CELL_W = nDias <= 7 ? 76 : nDias <= 14 ? 60 : 44;
+    const H_HEADER = 90;
+    const H_SUBTIT = 36;
+    const H_COL = 32;
+    const ROW_H = 26;
+    const GROUP_H = 28;
+    const H_LEG = 36;
+    const H_FOOTER = 34;
+    const TABLE_W = PREFIX_W + nDias * CELL_W;
+    const W = PAD + TABLE_W + PAD;
+
+    // agrupa por base
+    const grupos: { nome: string; eqs: LinhaMapa[] }[] = [];
+    for (const row of rows) {
+      let g = grupos.find((x) => x.nome === row.baseNome);
+      if (!g) { g = { nome: row.baseNome, eqs: [] }; grupos.push(g); }
+      g.eqs.push(row);
+    }
+
+    let totalH = H_HEADER + H_SUBTIT + H_COL;
+    for (const g of grupos) totalH += GROUP_H + g.eqs.length * ROW_H;
+    totalH += H_LEG + H_FOOTER;
+
+    const canvas = document.createElement('canvas');
+    canvas.width = W * SCALE; canvas.height = totalH * SCALE;
+    const ctx = canvas.getContext('2d')!;
+    ctx.scale(SCALE, SCALE);
+
+    function rr(x: number, y: number, w: number, h: number, r = 4) {
+      ctx.beginPath();
+      ctx.moveTo(x + r, y); ctx.lineTo(x + w - r, y);
+      ctx.arcTo(x + w, y, x + w, y + r, r); ctx.lineTo(x + w, y + h - r);
+      ctx.arcTo(x + w, y + h, x + w - r, y + h, r); ctx.lineTo(x + r, y + h);
+      ctx.arcTo(x, y + h, x, y + h - r, r); ctx.lineTo(x, y + r);
+      ctx.arcTo(x, y, x + r, y, r); ctx.closePath();
+    }
+    function txt(s: string, x: number, y: number, font = '11px Arial', color = '#1c1c2e', align: CanvasTextAlign = 'left', maxW?: number) {
+      ctx.save(); ctx.font = font; ctx.fillStyle = color; ctx.textAlign = align; ctx.textBaseline = 'alphabetic';
+      maxW !== undefined ? ctx.fillText(s, x, y, maxW) : ctx.fillText(s, x, y); ctx.restore();
+    }
+    const isWeekendISO = (iso: string) => { const d = new Date(iso + 'T00:00:00'); return d.getDay() === 0 || d.getDay() === 6; };
+    const NOMES_ABREV = ['Dom','Seg','Ter','Qua','Qui','Sex','Sáb'];
+
+    // === FUNDO ===
+    ctx.fillStyle = '#f0f4f8'; ctx.fillRect(0, 0, W, totalH);
+
+    // === HEADER ===
+    const hGrad = ctx.createLinearGradient(0, 0, W, H_HEADER);
+    hGrad.addColorStop(0, '#16387a'); hGrad.addColorStop(1, '#091628');
+    ctx.fillStyle = hGrad; ctx.fillRect(0, 0, W, H_HEADER);
+    ctx.fillStyle = '#f59e0b'; ctx.fillRect(0, H_HEADER - 5, W, 5);
+
+    const LOGO_H = 68;
+    const LY = (H_HEADER - 5 - LOGO_H) / 2;
+    let logoDrawW = 0;
+    if (logo) {
+      const nw = logo.naturalWidth || logo.width;
+      const nh = logo.naturalHeight || logo.height;
+      logoDrawW = (nw / nh) * LOGO_H;
+      ctx.save(); ctx.imageSmoothingEnabled = true; ctx.imageSmoothingQuality = 'high';
+      ctx.shadowColor = 'rgba(0,0,0,0.5)'; ctx.shadowBlur = 14; ctx.shadowOffsetY = 2;
+      ctx.drawImage(logo, PAD, LY, logoDrawW, LOGO_H); ctx.restore();
+    }
+    const TX = PAD + (logo ? logoDrawW + 16 : 0);
+    txt('CGB ENERGIA', TX, H_HEADER / 2 - 4, 'bold 26px Arial', '#ffffff');
+    txt('Mapa Histórico de Saídas de Campo', TX, H_HEADER / 2 + 20, '13px Arial', 'rgba(255,255,255,0.65)');
+    txt(`Gerado em ${new Date().toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'numeric', hour:'2-digit', minute:'2-digit' })}`, W - PAD, 28, '10px Arial', 'rgba(255,255,255,0.5)', 'right');
+
+    // === SUBTÍTULO ===
+    let y = H_HEADER;
+    ctx.fillStyle = '#1e3a5f'; ctx.fillRect(0, y, W, H_SUBTIT);
+    const ini = dias[0]!, fim = dias[dias.length - 1]!;
+    const periodoStr = `${diaLabel(ini)} a ${diaLabel(fim)}  ·  ${nDias} dias  ·  ${rows.length} equipes`;
+    txt(periodoStr, PAD, y + H_SUBTIT / 2 + 5, 'bold 13px Arial', '#ffffff');
+    const filtroNomes = [...new Set(rows.map((r) => r.baseNome))];
+    if (filtroNomes.length === 1) txt(filtroNomes[0]!, W - PAD, y + H_SUBTIT / 2 + 5, '12px Arial', 'rgba(255,255,255,0.6)', 'right');
+    y += H_SUBTIT;
+
+    // === CABEÇALHO DAS COLUNAS ===
+    // Fundo do header
+    ctx.fillStyle = '#1e3a5f'; ctx.fillRect(PAD, y, TABLE_W, H_COL);
+    // Coluna prefixo
+    txt('Prefixo', PAD + 8, y + H_COL / 2 + 5, 'bold 10px Arial', 'rgba(255,255,255,0.8)');
+    // Colunas de datas
+    for (let i = 0; i < nDias; i++) {
+      const iso = dias[i]!;
+      const cx = PAD + PREFIX_W + i * CELL_W;
+      const isWE = isWeekendISO(iso);
+      const isHoje = iso === hojeISO;
+      if (isWE) { ctx.fillStyle = 'rgba(0,0,0,0.25)'; ctx.fillRect(cx, y, CELL_W, H_COL); }
+      if (isHoje) { ctx.fillStyle = 'rgba(245,158,11,0.35)'; ctx.fillRect(cx, y, CELL_W, H_COL); }
+      const diaSem = NOMES_ABREV[new Date(iso + 'T00:00:00').getDay()]!;
+      const numDia = iso.slice(8);
+      txt(diaSem, cx + CELL_W / 2, y + 13, `bold ${nDias <= 14 ? 9 : 8}px Arial`, isWE ? 'rgba(255,255,255,0.4)' : 'rgba(255,255,255,0.75)', 'center');
+      txt(numDia, cx + CELL_W / 2, y + H_COL - 6, `bold ${nDias <= 14 ? 11 : 9}px Arial`, isHoje ? '#f59e0b' : isWE ? 'rgba(255,255,255,0.4)' : '#ffffff', 'center');
+      // linha separadora
+      if (i > 0) { ctx.strokeStyle = 'rgba(255,255,255,0.1)'; ctx.lineWidth = 1; ctx.beginPath(); ctx.moveTo(cx, y + 4); ctx.lineTo(cx, y + H_COL - 4); ctx.stroke(); }
+    }
+    y += H_COL;
+
+    // === GRUPOS DE BASE ===
+    for (const grupo of grupos) {
+      // Cabeçalho do grupo
+      ctx.fillStyle = '#2d4a6e';
+      ctx.fillRect(PAD, y, TABLE_W, GROUP_H);
+      ctx.fillStyle = '#f59e0b'; ctx.fillRect(PAD, y, 4, GROUP_H);
+      txt(grupo.nome.toUpperCase(), PAD + 12, y + GROUP_H / 2 + 5, 'bold 11px Arial', '#ffffff');
+      txt(`${grupo.eqs.length} equipes`, W - PAD - 2, y + GROUP_H / 2 + 5, '9px Arial', 'rgba(255,255,255,0.55)', 'right');
+      y += GROUP_H;
+
+      // Linhas de equipe
+      for (let ri = 0; ri < grupo.eqs.length; ri++) {
+        const eq = grupo.eqs[ri]!;
+        const rowBg = ri % 2 === 0 ? '#ffffff' : '#f7f9fc';
+        ctx.fillStyle = rowBg; ctx.fillRect(PAD, y, TABLE_W, ROW_H);
+
+        // Prefixo
+        txt(eq.identificador, PAD + 8, y + ROW_H / 2 + 4, `bold ${nDias <= 14 ? 9 : 8}px monospace`, '#1e3a5f', 'left', PREFIX_W - 12);
+
+        // Linha separadora do prefixo
+        ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 1;
+        ctx.beginPath(); ctx.moveTo(PAD + PREFIX_W, y); ctx.lineTo(PAD + PREFIX_W, y + ROW_H); ctx.stroke();
+
+        // Células
+        for (let i = 0; i < nDias; i++) {
+          const cel = eq.celulas[i]!;
+          const cx = PAD + PREFIX_W + i * CELL_W;
+          const isWE = isWeekendISO(dias[i]!);
+          const isHoje = dias[i] === hojeISO;
+
+          // Fundo da célula
+          if (cel.status === 'no_prazo') {
+            ctx.fillStyle = '#0ca30c'; ctx.fillRect(cx + 1, y + 2, CELL_W - 2, ROW_H - 4);
+          } else if (cel.status === 'atrasado') {
+            ctx.fillStyle = '#d03b3b'; ctx.fillRect(cx + 1, y + 2, CELL_W - 2, ROW_H - 4);
+          } else if (cel.status === 'ausente') {
+            ctx.fillStyle = '#e65100'; ctx.fillRect(cx + 1, y + 2, CELL_W - 2, ROW_H - 4);
+          } else if (isWE) {
+            ctx.fillStyle = '#e8edf3'; ctx.fillRect(cx + 1, y + 2, CELL_W - 2, ROW_H - 4);
+          } else if (isHoje) {
+            ctx.fillStyle = 'rgba(245,158,11,0.08)'; ctx.fillRect(cx, y, CELL_W, ROW_H);
+          }
+
+          // Texto da célula
+          if (cel.hora) {
+            txt(cel.hora, cx + CELL_W / 2, y + ROW_H / 2 + 4, `bold ${nDias <= 14 ? 10 : 8}px Arial`, '#ffffff', 'center');
+          } else if (cel.status === 'ausente') {
+            txt('AUS', cx + CELL_W / 2, y + ROW_H / 2 + 4, `bold ${nDias <= 14 ? 8 : 7}px Arial`, '#ffffff', 'center');
+          }
+
+          // Grid vertical
+          ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 0.5;
+          ctx.beginPath(); ctx.moveTo(cx, y); ctx.lineTo(cx, y + ROW_H); ctx.stroke();
+        }
+
+        // Grid horizontal
+        ctx.strokeStyle = '#e2e8f0'; ctx.lineWidth = 0.5;
+        ctx.beginPath(); ctx.moveTo(PAD, y + ROW_H); ctx.lineTo(PAD + TABLE_W, y + ROW_H); ctx.stroke();
+        y += ROW_H;
+      }
+      // Gap entre grupos
+      y += 6;
+      ctx.fillStyle = '#cbd5e1'; ctx.fillRect(PAD, y - 3, TABLE_W, 1);
+    }
+
+    // === LEGENDA ===
+    y += 8;
+    const legItems: [string, string, string][] = [
+      ['#0ca30c', '#fff', 'No prazo'],
+      ['#d03b3b', '#fff', 'Atrasado'],
+      ['#e65100', '#fff', 'Ausente (falta)'],
+      ['#e8edf3', '#334155', 'Fim de semana'],
+    ];
+    let lx = PAD;
+    for (const [bg, fg, label] of legItems) {
+      ctx.font = 'bold 9px Arial';
+      const tw = ctx.measureText(label).width + 20;
+      rr(lx, y, tw, 18, 3);
+      ctx.fillStyle = bg; ctx.fill();
+      ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 0.8; ctx.stroke();
+      txt(label, lx + tw / 2, y + 12, 'bold 9px Arial', fg, 'center');
+      lx += tw + 8;
+    }
+    y += H_LEG;
+
+    // === FOOTER ===
+    ctx.fillStyle = '#1e3a5f'; ctx.fillRect(0, totalH - H_FOOTER, W, H_FOOTER);
+    txt('TimeTrack  ·  CGB Engenharia  ·  Documento gerado automaticamente', W / 2, totalH - H_FOOTER / 2 + 5, '10px Arial', 'rgba(255,255,255,0.55)', 'center');
+
+    // === BORDA GERAL ===
+    ctx.strokeStyle = '#cbd5e1'; ctx.lineWidth = 1;
+    ctx.strokeRect(PAD, H_HEADER + H_SUBTIT, TABLE_W, totalH - H_HEADER - H_SUBTIT - H_LEG - H_FOOTER + 6);
+
+    // === EXPORTA PDF ===
+    const imgData = canvas.toDataURL('image/jpeg', 0.93);
     const PX_TO_MM = 25.4 / 96;
-    const pdfW = canvas.width / 2 * PX_TO_MM;
-    const pdfH = canvas.height / 2 * PX_TO_MM;
-    const orient = pdfW > pdfH ? 'l' : 'p';
-    const pdf = new jsPDF({ unit: 'mm', format: [pdfW, pdfH], orientation: orient });
+    const pdfW = W * PX_TO_MM;
+    const pdfH = totalH * PX_TO_MM;
+    const pdf = new jsPDF({ unit: 'mm', format: [pdfW, pdfH], orientation: pdfW > pdfH ? 'l' : 'p' });
     pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
     pdf.save(`mapa-historico-${ini}-a-${fim}.pdf`);
     $q.notify({ type: 'positive', message: 'PDF do mapa histórico gerado!' });
