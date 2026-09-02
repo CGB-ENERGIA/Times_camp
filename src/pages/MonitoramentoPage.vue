@@ -402,8 +402,11 @@
           <q-btn flat dense round icon="refresh" :loading="carregandoMapa" @click="carregarMapa">
             <q-tooltip>Recarregar mapa</q-tooltip>
           </q-btn>
-          <q-btn flat dense round icon="ios_share" :loading="exportandoMapa" @click="exportarMapa">
-            <q-tooltip>Baixar imagem para WhatsApp</q-tooltip>
+          <q-btn flat dense round icon="image" :loading="exportandoMapa" @click="exportarMapaImagem">
+            <q-tooltip>Baixar imagem (PNG)</q-tooltip>
+          </q-btn>
+          <q-btn flat dense round icon="picture_as_pdf" :loading="exportandoMapaPdf" @click="exportarMapaPdf">
+            <q-tooltip>Baixar PDF (alta qualidade)</q-tooltip>
           </q-btn>
         </q-card-section>
         <q-separator />
@@ -600,6 +603,7 @@ const mediaCardEl = ref<{ $el: HTMLElement } | null>(null);
 const mapaCardEl = ref<{ $el: HTMLElement } | null>(null);
 const exportandoMedia = ref(false);
 const exportandoMapa = ref(false);
+const exportandoMapaPdf = ref(false);
 const exportandoPendentes = ref(false);
 const exportandoResumo = ref(false);
 const exportandoDetalhe = ref(false);
@@ -1534,10 +1538,24 @@ async function exportarMedia() {
   }
 }
 
-async function exportarMapa() {
+async function exportarMapaImagem() {
   const cardEl = mapaCardEl.value?.$el;
   if (!cardEl || exportandoMapa.value || !mapaCarregado.value) return;
   exportandoMapa.value = true;
+  try {
+    await nextTick();
+    const ini = datasMapaRange.value[0];
+    const fim = datasMapaRange.value[datasMapaRange.value.length - 1];
+    await capturarEl(cardEl, `mapa-historico-${ini}-a-${fim}.png`);
+  } finally {
+    exportandoMapa.value = false;
+  }
+}
+
+async function exportarMapaPdf() {
+  const cardEl = mapaCardEl.value?.$el;
+  if (!cardEl || exportandoMapaPdf.value || !mapaCarregado.value) return;
+  exportandoMapaPdf.value = true;
   try {
     await nextTick();
     const ini = datasMapaRange.value[0];
@@ -1554,7 +1572,7 @@ async function exportarMapa() {
     pdf.save(`mapa-historico-${ini}-a-${fim}.pdf`);
     $q.notify({ type: 'positive', message: 'PDF do mapa histórico gerado!' });
   } finally {
-    exportandoMapa.value = false;
+    exportandoMapaPdf.value = false;
   }
 }
 
