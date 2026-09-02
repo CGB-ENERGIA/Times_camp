@@ -434,18 +434,36 @@
                 </tr>
               </thead>
               <tbody>
-                <tr v-for="row in mapaGrid" :key="row.equipeId">
-                  <td class="mapa-prefixo-cell">{{ row.identificador }}</td>
-                  <td
-                    v-for="(cel, i) in row.celulas"
-                    :key="i"
-                    class="mapa-celula"
-                    :class="`mapa-status-${cel.status}`"
-                  >
-                    <span v-if="cel.status === 'ausente'" class="mapa-ausente-txt">AUS</span>
-                    <span v-else-if="cel.hora">{{ cel.hora }}</span>
-                  </td>
-                </tr>
+                <template v-for="grupo in mapaGrupos" :key="grupo.nome">
+                  <!-- Cabeçalho do grupo (base) -->
+                  <tr class="mapa-base-header-row">
+                    <td class="mapa-base-header-cell" :colspan="datasMapaRange.length + 1">
+                      <span class="mapa-base-nome">{{ grupo.nome }}</span>
+                      <span v-if="grupo.stat.media !== null" class="mapa-base-media">
+                        Média:
+                        <strong :class="grupo.stat.media <= 510 ? 'text-positive' : 'text-negative'">{{ formatarMinutos(grupo.stat.media) }}</strong>
+                        <span class="mapa-base-meta"> · {{ grupo.stat.count }} reg.</span>
+                        <span v-if="grupo.stat.minH || grupo.stat.maxH" class="mapa-base-expurgo">
+                          · Expurgo: <span v-if="grupo.stat.minH">↓{{ grupo.stat.minH }}</span> <span v-if="grupo.stat.maxH">↑{{ grupo.stat.maxH }}</span>
+                        </span>
+                      </span>
+                      <span v-else class="mapa-base-meta"> — sem registros</span>
+                    </td>
+                  </tr>
+                  <!-- Linhas das equipes -->
+                  <tr v-for="row in grupo.eqs" :key="row.equipeId">
+                    <td class="mapa-prefixo-cell">{{ row.identificador }}</td>
+                    <td
+                      v-for="(cel, i) in row.celulas"
+                      :key="i"
+                      class="mapa-celula"
+                      :class="`mapa-status-${cel.status}`"
+                    >
+                      <span v-if="cel.status === 'ausente'" class="mapa-ausente-txt">AUS</span>
+                      <span v-else-if="cel.hora">{{ cel.hora }}</span>
+                    </td>
+                  </tr>
+                </template>
               </tbody>
             </table>
           </div>
@@ -709,6 +727,33 @@ const mapaGrid = computed<LinhaMapa[]>(() => {
       return { hora: hora ? hora.slice(0, 5) : null, status };
     }),
   }));
+});
+
+function calcMediaMapa(horas: string[]) {
+  if (!horas.length) return { media: null as number | null, count: 0, minH: null as string | null, maxH: null as string | null };
+  const sorted = [...horas].sort((a, b) => toMinutos(a) - toMinutos(b));
+  if (sorted.length <= 2) {
+    const soma = sorted.reduce((s, h) => s + toMinutos(h), 0);
+    return { media: Math.round(soma / sorted.length), count: sorted.length, minH: null, maxH: null };
+  }
+  const minH = sorted[0]!, maxH = sorted[sorted.length - 1]!;
+  const restantes = sorted.slice(1, -1);
+  const soma = restantes.reduce((s, h) => s + toMinutos(h), 0);
+  return { media: Math.round(soma / restantes.length), count: restantes.length, minH, maxH };
+}
+
+const mapaGrupos = computed(() => {
+  const grupos: { nome: string; eqs: LinhaMapa[]; stat: ReturnType<typeof calcMediaMapa> }[] = [];
+  for (const row of mapaGrid.value) {
+    let g = grupos.find((x) => x.nome === row.baseNome);
+    if (!g) { g = { nome: row.baseNome, eqs: [], stat: { media: null, count: 0, minH: null, maxH: null } }; grupos.push(g); }
+    g.eqs.push(row);
+  }
+  for (const g of grupos) {
+    const horas = g.eqs.flatMap((eq) => eq.celulas.map((c) => c.hora).filter((h): h is string => !!h));
+    g.stat = calcMediaMapa(horas);
+  }
+  return grupos;
 });
 
 // Plugin: mostra o valor numérico em cada segmento das barras empilhadas (Status por base)
@@ -1582,16 +1627,12 @@ async function exportarMapaPdf() {
     const TABLE_W = PREFIX_W + nDias * CELL_W;
     const W = PAD + TABLE_W + PAD;
 
-    // agrupa por base
-    const grupos: { nome: string; eqs: LinhaMapa[] }[] = [];
-    for (const row of rows) {
-      let g = grupos.find((x) => x.nome === row.baseNome);
-      if (!g) { g = { nome: row.baseNome, eqs: [] }; grupos.push(g); }
-      g.eqs.push(row);
-    }
+    // usa os grupos já calculados (com média + expurgo)
+    const grupos = mapaGrupos.value;
+    const MEDIA_ROW_H = 24; // linha de média no fundo de cada base
 
     let totalH = H_HEADER + H_SUBTIT + H_COL;
-    for (const g of grupos) totalH += GROUP_H + g.eqs.length * ROW_H;
+    for (const g of grupos) totalH += GROUP_H + g.eqs.length * ROW_H + MEDIA_ROW_H + 6;
     totalH += H_LEG + H_FOOTER;
 
     const canvas = document.createElement('canvas');
@@ -1731,8 +1772,23 @@ async function exportarMapaPdf() {
         ctx.beginPath(); ctx.moveTo(PAD, y + ROW_H); ctx.lineTo(PAD + TABLE_W, y + ROW_H); ctx.stroke();
         y += ROW_H;
       }
-      // Gap entre grupos
-      y += 6;
+
+      // === Linha de média da base ===
+      const sm = grupo.stat;
+      const mediaOk = sm.media !== null && sm.media <= 510;
+      const mediaCor = sm.media === null ? '#64748b' : mediaOk ? '#15803d' : '#b91c1c';
+      const mediaBg = sm.media === null ? '#f1f5f9' : mediaOk ? '#f0fdf4' : '#fff5f5';
+      ctx.fillStyle = mediaBg; ctx.fillRect(PAD, y, TABLE_W, MEDIA_ROW_H);
+      ctx.fillStyle = mediaCor; ctx.fillRect(PAD, y, 4, MEDIA_ROW_H);
+      ctx.strokeStyle = sm.media === null ? '#e2e8f0' : mediaOk ? '#bbf7d0' : '#fecaca';
+      ctx.lineWidth = 1; ctx.strokeRect(PAD, y, TABLE_W, MEDIA_ROW_H);
+      const mediaStr = sm.media !== null ? `Média do período: ${formatarMinutos(sm.media)}  ·  ${sm.count} registros` : 'Sem registros no período';
+      txt(mediaStr, PAD + 12, y + MEDIA_ROW_H / 2 + 4, `bold 10px Arial`, mediaCor);
+      if (sm.minH || sm.maxH) {
+        const expStr = `Expurgo: ${sm.minH ? `↓${sm.minH}` : ''} ${sm.maxH ? `↑${sm.maxH}` : ''}`.trim();
+        txt(expStr, PAD + TABLE_W - 10, y + MEDIA_ROW_H / 2 + 4, '9px Arial', '#94a3b8', 'right');
+      }
+      y += MEDIA_ROW_H + 6;
       ctx.fillStyle = '#cbd5e1'; ctx.fillRect(PAD, y - 3, TABLE_W, 1);
     }
 
@@ -2577,6 +2633,35 @@ onUnmounted(() => {
   border: 1px solid rgba(128, 128, 128, 0.2);
   text-align: center;
   padding: 3px 5px;
+}
+
+.mapa-base-header-row {
+  background: #1e3a5f;
+}
+.mapa-base-header-cell {
+  padding: 5px 10px;
+  font-size: 0.72rem;
+  white-space: nowrap;
+  position: sticky;
+  left: 0;
+}
+.mapa-base-nome {
+  font-weight: 700;
+  color: #ffffff;
+  margin-right: 12px;
+  font-size: 0.75rem;
+}
+.mapa-base-media {
+  color: rgba(255,255,255,0.85);
+  font-size: 0.7rem;
+}
+.mapa-base-meta {
+  color: rgba(255,255,255,0.55);
+  font-size: 0.68rem;
+}
+.mapa-base-expurgo {
+  color: rgba(255,255,255,0.45);
+  font-size: 0.65rem;
 }
 
 .mapa-prefixo-th {
