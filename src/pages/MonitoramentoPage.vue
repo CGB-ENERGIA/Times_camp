@@ -2174,6 +2174,7 @@ let intervalo: ReturnType<typeof setInterval> | undefined;
 onMounted(() => {
   void carregar();
   if (visaoGrafico.value === 'heatmap') void carregarHeatmapSemana();
+  void carregarMapa();
   intervalo = setInterval(() => void carregar(), 45000);
 });
 
