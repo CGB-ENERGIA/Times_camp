@@ -191,11 +191,22 @@
               flat
               dense
               round
-              icon="ios_share"
+              icon="image"
               :loading="exportando"
               @click="exportarGrafico"
             >
-              <q-tooltip>Baixar imagem (para enviar no WhatsApp)</q-tooltip>
+              <q-tooltip>Baixar imagem (PNG)</q-tooltip>
+            </q-btn>
+            <q-btn
+              v-if="visaoGrafico === 'heatmap'"
+              flat
+              dense
+              round
+              icon="picture_as_pdf"
+              :loading="exportandoHeatmapPdf"
+              @click="exportarHeatmapPdf"
+            >
+              <q-tooltip>Baixar PDF (alta qualidade)</q-tooltip>
             </q-btn>
           </div>
         </q-card-section>
@@ -2130,7 +2141,7 @@ async function exportarPendentes() {
   }
 }
 
-async function exportarHeatmapCanvas() {
+async function exportarHeatmapCanvas(format: 'png' | 'pdf' = 'pdf') {
   const grupos = rowsHeatmapSemana.value;
   const dias = diasDaSemana.value;
   if (!grupos.length) { $q.notify({ type: 'info', message: 'Nenhum dado para exportar' }); return; }
@@ -2384,21 +2395,42 @@ async function exportarHeatmapCanvas() {
   ctx.fillStyle = '#e2e8f0'; ctx.fillRect(0, totalH - H_FOOTER, W, H_FOOTER);
   txt('Gerado automaticamente · TimeTrack · CGB Engenharia', W / 2, totalH - H_FOOTER / 2 + 5, '11px Arial', '#94a3b8', 'center');
 
-  const imgData = canvas.toDataURL('image/jpeg', 0.97);
-  const PX_TO_MM = 25.4 / 96;
-  const pdfW = W * PX_TO_MM;
-  const pdfH = totalH * PX_TO_MM;
-  const pdf = new jsPDF({ unit: 'mm', format: [pdfW, pdfH] });
-  pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
-  pdf.save(`heatmap-${dias[0]!.str}-a-${dias[6]!.str}.pdf`);
-  $q.notify({ type: 'positive', message: 'PDF do heatmap gerado!' });
+  const nome = `heatmap-${dias[0]!.str}-a-${dias[6]!.str}`;
+  if (format === 'pdf') {
+    const imgData = canvas.toDataURL('image/jpeg', 0.97);
+    const PX_TO_MM = 25.4 / 96;
+    const pdfW = W * PX_TO_MM;
+    const pdfH = totalH * PX_TO_MM;
+    const pdf = new jsPDF({ unit: 'mm', format: [pdfW, pdfH] });
+    pdf.addImage(imgData, 'JPEG', 0, 0, pdfW, pdfH);
+    pdf.save(`${nome}.pdf`);
+    $q.notify({ type: 'positive', message: 'PDF do heatmap gerado!' });
+  } else {
+    const blob: Blob | null = await new Promise((resolve) => canvas.toBlob(resolve, 'image/png'));
+    if (blob) {
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url; a.download = `${nome}.png`; a.click();
+      URL.revokeObjectURL(url);
+      $q.notify({ type: 'positive', message: 'Imagem do heatmap gerada!' });
+    }
+  }
+}
+
+const exportandoHeatmapPdf = ref(false);
+
+async function exportarHeatmapPdf() {
+  if (exportandoHeatmapPdf.value) return;
+  exportandoHeatmapPdf.value = true;
+  try { await exportarHeatmapCanvas('pdf'); }
+  finally { exportandoHeatmapPdf.value = false; }
 }
 
 async function exportarGrafico() {
   if (exportando.value) return;
   exportando.value = true;
   try {
-    if (visaoGrafico.value === 'heatmap') { await exportarHeatmapCanvas(); return; }
+    if (visaoGrafico.value === 'heatmap') { await exportarHeatmapCanvas('png'); return; }
 
     const cardEl = graficoCardEl.value?.$el;
     if (!cardEl) return;
