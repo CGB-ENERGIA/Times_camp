@@ -55,5 +55,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     baseId: user.base_id,
     supervisor: user.supervisor,
     coordenador: user.coordenador,
+    supervisores: user.supervisores ?? [],
+    coordenadores: user.coordenadores ?? [],
+    equipesIds: user.equipes_ids ?? [],
   });
 }
