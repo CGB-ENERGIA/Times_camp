@@ -579,7 +579,9 @@ async function onExcelSelecionado(event: Event) {
       return;
     }
 
-    const mapa = new Map(equipes.value.map((e) => [e.identificador.toUpperCase(), e]));
+    // Busca TODAS as equipes (sem filtro de base) para evitar duplicatas
+    const { data: todasEquipes } = await api.get<Equipe[]>('/equipes');
+    const mapa = new Map(todasEquipes.map((e) => [e.identificador.toUpperCase(), e]));
     const linhas: LinhaImport[] = [];
 
     ws.eachRow((row, idx) => {
