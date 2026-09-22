@@ -259,23 +259,23 @@
             <template #body-cell-status="props">
               <q-td :props="props">
                 <q-badge
-                  :color="props.row.status === 'ok' ? 'positive' : props.row.status === 'novo' ? 'warning' : 'negative'"
-                  :label="props.row.status === 'ok' ? 'Vai atualizar' : props.row.status === 'novo' ? 'Não encontrada' : 'Sem alteração'"
+                  :color="props.row.status === 'ok' ? 'positive' : props.row.status === 'novo' ? (props.row.baseId && props.row.tipo ? 'blue' : 'negative') : 'grey-5'"
+                  :label="props.row.status === 'ok' ? 'Vai atualizar' : props.row.status === 'novo' ? (props.row.baseId && props.row.tipo ? 'Vai criar' : 'Sem base/tipo') : 'Sem alteração'"
                 />
               </q-td>
             </template>
           </q-table>
         </q-card-section>
         <q-card-section class="text-caption text-grey-6">
-          Apenas as linhas marcadas como "Vai atualizar" serão salvas.
+          "Vai atualizar" = supervisor/coordenador serão alterados. "Vai criar" = equipe nova será cadastrada.
         </q-card-section>
         <q-card-actions align="right">
           <q-btn flat label="Cancelar" @click="dialogoImport = false" />
           <q-btn
             color="primary"
-            :label="`Importar ${linhasImport.filter(l => l.status === 'ok').length} equipe(s)`"
+            :label="`Importar ${linhasImport.filter(l => l.status === 'ok').length + linhasImport.filter(l => l.status === 'novo' && l.baseId && l.tipo).length} equipe(s)`"
             :loading="importando"
-            :disable="linhasImport.filter(l => l.status === 'ok').length === 0"
+            :disable="linhasImport.filter(l => l.status === 'ok').length + linhasImport.filter(l => l.status === 'novo' && l.baseId && l.tipo).length === 0"
             @click="confirmarImport"
           />
         </q-card-actions>
@@ -313,6 +313,9 @@ interface LinhaImport {
   coordenador: string;
   status: 'ok' | 'novo' | 'sem_alteracao';
   equipeId: number | undefined;
+  baseNome: string;
+  tipo: string;
+  baseId: number | undefined;
 }
 
 const tipos = ['GERE', 'GOMAN', 'GSTC'];
@@ -385,6 +388,8 @@ const colunas: QTableColumn[] = [
 
 const colunasImport: QTableColumn[] = [
   { name: 'identificador', label: 'Equipe', field: 'identificador', align: 'left' },
+  { name: 'baseNome', label: 'Base', field: 'baseNome', align: 'left' },
+  { name: 'tipo', label: 'Tipo', field: 'tipo', align: 'left' },
   { name: 'supervisor', label: 'Supervisor', field: 'supervisor', align: 'left' },
   { name: 'coordenador', label: 'Coordenador', field: 'coordenador', align: 'left' },
   { name: 'status', label: 'Resultado', field: 'status', align: 'left' },
@@ -565,6 +570,8 @@ async function onExcelSelecionado(event: Event) {
       if (v === 'identificador') colIdx['identificador'] = col;
       if (v === 'supervisor') colIdx['supervisor'] = col;
       if (v === 'coordenador') colIdx['coordenador'] = col;
+      if (v === 'base') colIdx['base'] = col;
+      if (v === 'tipo') colIdx['tipo'] = col;
     });
 
     if (!colIdx['identificador']) {
@@ -581,20 +588,21 @@ async function onExcelSelecionado(event: Event) {
       if (!ident) return;
       const supervisor = String(row.getCell(colIdx['supervisor'] ?? 0).value ?? '').trim();
       const coordenador = String(row.getCell(colIdx['coordenador'] ?? 0).value ?? '').trim();
+      const baseNome = String(row.getCell(colIdx['base'] ?? 0).value ?? '').trim();
+      const tipo = String(row.getCell(colIdx['tipo'] ?? 0).value ?? '').trim();
+      const baseId = opcoesBase.value.find((b) => b.label.toLowerCase() === baseNome.toLowerCase())?.value;
       const equipe = mapa.get(ident.toUpperCase());
 
       let status: LinhaImport['status'];
       if (!equipe) {
         status = 'novo';
       } else if (!supervisor && !coordenador) {
-        // linha sem dados — nada a importar
         status = 'sem_alteracao';
       } else {
-        // tem dados preenchidos → vai importar (mesmo que sejam os mesmos do banco)
         status = 'ok';
       }
 
-      linhas.push({ identificador: ident, supervisor, coordenador, status, equipeId: equipe?.id });
+      linhas.push({ identificador: ident, supervisor, coordenador, status, equipeId: equipe?.id, baseNome, tipo, baseId });
     });
 
     linhasImport.value = linhas;
@@ -606,10 +614,11 @@ async function onExcelSelecionado(event: Event) {
 
 async function confirmarImport() {
   const paraAtualizar = linhasImport.value.filter((l) => l.status === 'ok');
+  const paraCriar = linhasImport.value.filter((l) => l.status === 'novo' && l.baseId && l.tipo);
   importando.value = true;
   try {
-    await Promise.all(
-      paraAtualizar.map((linha) => {
+    await Promise.all([
+      ...paraAtualizar.map((linha) => {
         const eq = equipes.value.find((e) => e.id === linha.equipeId)!;
         return api.put(`/equipes/${linha.equipeId}`, {
           tipo: eq.tipo,
@@ -620,8 +629,18 @@ async function confirmarImport() {
           ativo: eq.ativo,
         });
       }),
-    );
-    $q.notify({ type: 'positive', message: `${paraAtualizar.length} equipe(s) importadas com sucesso!` });
+      ...paraCriar.map((linha) =>
+        api.post('/equipes', {
+          baseId: linha.baseId,
+          tipo: linha.tipo,
+          identificador: linha.identificador,
+          supervisor: linha.supervisor || null,
+          coordenador: linha.coordenador || null,
+        }),
+      ),
+    ]);
+    const total = paraAtualizar.length + paraCriar.length;
+    $q.notify({ type: 'positive', message: `${total} equipe(s) importadas com sucesso!` });
     dialogoImport.value = false;
     await carregar();
   } catch {
