@@ -1,5 +1,12 @@
 export type TipoJust = 'FALTA' | 'ATRASO' | 'FOLGA_COMPENSADA' | 'FERIADO';
-export type MotivoJust = 'INTERJORNADA' | 'CARREGAMENTO' | 'REUNIAO' | 'TREINAMENTO' | 'CAMINHAO_OFICINA' | 'OUTRO';
+export type MotivoJust =
+  | 'INTERJORNADA'
+  | 'PESSOAL_INSUFICIENTE'
+  | 'CARREGAMENTO'
+  | 'REUNIAO'
+  | 'TREINAMENTO'
+  | 'CAMINHAO_OFICINA'
+  | 'OUTRO';
 
 export const TIPOS_JUST: Array<{ value: TipoJust; label: string }> = [
   { value: 'FALTA', label: 'Falta' },
@@ -8,14 +15,26 @@ export const TIPOS_JUST: Array<{ value: TipoJust; label: string }> = [
   { value: 'FERIADO', label: 'Feriado' },
 ];
 
-export const MOTIVOS_JUST: Array<{ value: MotivoJust; label: string }> = [
-  { value: 'INTERJORNADA', label: 'Interjornada' },
-  { value: 'CARREGAMENTO', label: 'Carregamento' },
-  { value: 'REUNIAO', label: 'Reunião' },
-  { value: 'TREINAMENTO', label: 'Treinamento' },
-  { value: 'CAMINHAO_OFICINA', label: 'Caminhão na oficina' },
-  { value: 'OUTRO', label: 'Outro (descrever)' },
-];
+const ROTULOS_MOTIVO: Record<MotivoJust, string> = {
+  INTERJORNADA: 'Interjornada',
+  PESSOAL_INSUFICIENTE: 'Pessoal insuficiente',
+  CARREGAMENTO: 'Carregamento',
+  REUNIAO: 'Reunião',
+  TREINAMENTO: 'Treinamento',
+  CAMINHAO_OFICINA: 'Caminhão na oficina',
+  OUTRO: 'Outro (descrever)',
+};
+
+const MOTIVOS_POR_TIPO: Record<'FALTA' | 'ATRASO', MotivoJust[]> = {
+  FALTA: ['INTERJORNADA', 'PESSOAL_INSUFICIENTE', 'TREINAMENTO', 'OUTRO'],
+  ATRASO: ['INTERJORNADA', 'CARREGAMENTO', 'REUNIAO', 'TREINAMENTO', 'CAMINHAO_OFICINA', 'OUTRO'],
+};
+
+/** Motivos permitidos para o tipo (vazio quando o tipo não pede motivo). */
+export function motivosPorTipo(tipo: TipoJust | null): Array<{ value: MotivoJust; label: string }> {
+  if (tipo !== 'FALTA' && tipo !== 'ATRASO') return [];
+  return MOTIVOS_POR_TIPO[tipo].map((value) => ({ value, label: ROTULOS_MOTIVO[value] }));
+}
 
 export function rotuloTipoJust(tipo: string | null | undefined): string {
   return TIPOS_JUST.find((t) => t.value === tipo)?.label ?? 'Justificado';
@@ -26,14 +45,14 @@ export function exigeMotivo(tipo: TipoJust | null): boolean {
   return tipo === 'FALTA' || tipo === 'ATRASO';
 }
 
-const TEXTO_FALTA: Record<Exclude<MotivoJust, 'INTERJORNADA' | 'OUTRO'>, string> = {
-  CARREGAMENTO: 'Equipe em carregamento',
-  REUNIAO: 'Equipe em reunião',
+type MotivoFixo = Exclude<MotivoJust, 'INTERJORNADA' | 'OUTRO'>;
+
+const TEXTO_FALTA: Partial<Record<MotivoFixo, string>> = {
+  PESSOAL_INSUFICIENTE: 'Pessoal insuficiente',
   TREINAMENTO: 'Equipe em treinamento',
-  CAMINHAO_OFICINA: 'Caminhão na oficina',
 };
 
-const TEXTO_ATRASO: Record<Exclude<MotivoJust, 'INTERJORNADA' | 'OUTRO'>, string> = {
+const TEXTO_ATRASO: Partial<Record<MotivoFixo, string>> = {
   CARREGAMENTO: 'Atraso no carregamento',
   REUNIAO: 'Atraso por reunião',
   TREINAMENTO: 'Atraso por treinamento',
@@ -57,7 +76,8 @@ export function montarJustificativa(
     if (!numero) return '';
     return tipo === 'ATRASO' ? `Atraso por interjornada INC - ${numero}` : `Interjornada INC - ${numero}`;
   }
-  return (tipo === 'ATRASO' ? TEXTO_ATRASO : TEXTO_FALTA)[motivo];
+  if (!motivosPorTipo(tipo).some((m) => m.value === motivo)) return '';
+  return (tipo === 'ATRASO' ? TEXTO_ATRASO : TEXTO_FALTA)[motivo] ?? '';
 }
 
 /** Texto para exibição: evita repetir o tipo quando o motivo já o contém ("Atraso: Atraso no carregamento"). */

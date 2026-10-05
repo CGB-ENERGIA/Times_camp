@@ -182,7 +182,7 @@
           <q-select
             v-if="exigeMotivo(tipoJust)"
             v-model="motivoSel"
-            :options="MOTIVOS_JUST"
+            :options="motivosPorTipo(tipoJust)"
             emit-value
             map-options
             label="Descrição do motivo"
@@ -258,7 +258,7 @@ import { useAuthStore } from '@/stores/auth';
 import { hojeStr, agoraStr } from '@/utils/date';
 import {
   TIPOS_JUST,
-  MOTIVOS_JUST,
+  motivosPorTipo,
   exigeMotivo,
   montarJustificativa,
   resumoJust,
@@ -428,6 +428,8 @@ function aoMudarTipo() {
     motivoSel.value = null;
     outroTexto.value = '';
     incNumero.value = '';
+  } else if (motivoSel.value && !motivosPorTipo(tipoJust.value).some((m) => m.value === motivoSel.value)) {
+    motivoSel.value = null;
   }
 }
 
