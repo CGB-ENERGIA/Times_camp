@@ -387,7 +387,7 @@
                 <span v-if="eq.horaSaida" class="equipe-chip-time">{{ eq.horaSaida.slice(0, 5) }}</span>
                 <span v-if="eq.atrasoMin" class="equipe-chip-atraso">+{{ eq.atrasoMin }}m</span>
                 <span v-if="eq.status === 'justificado' && eq.justificativa" class="equipe-chip-just">
-                  {{ eq.justificativaTipo === 'FALTA' ? 'Falta' : 'Atraso' }}: {{ eq.justificativa }}
+                  {{ resumoJust(eq.justificativaTipo, eq.justificativa) }}
                 </span>
               </div>
             </div>
@@ -547,6 +547,7 @@ import html2canvas from 'html2canvas';
 import { jsPDF } from 'jspdf';
 import { api } from '@/boot/axios';
 import { hojeStr } from '@/utils/date';
+import { resumoJust, rotuloTipoJust, type TipoJust } from '@/utils/justificativa';
 
 ChartJS.register(...registerables);
 
@@ -572,7 +573,7 @@ interface EquipeStatus {
   observacao: string | null;
   registradoPor: string | null;
   justificativa: string | null;
-  justificativaTipo: 'FALTA' | 'ATRASO' | null;
+  justificativaTipo: TipoJust | null;
   status: Status;
 }
 
@@ -1900,14 +1901,13 @@ async function exportarDetalhe() {
       if (atual) linhas.push(atual);
       return linhas;
     }
-    const justPorBase = new Map<string, Array<{ ident: string; tipo: string; linhas: string[] }>>();
+    const justPorBase = new Map<string, Array<{ ident: string; linhas: string[] }>>();
     for (const b of bases) {
       const itens = b.equipes
         .filter((e) => e.status === 'justificado')
         .map((e) => ({
           ident: e.identificador,
-          tipo: e.justificativaTipo === 'FALTA' ? 'Falta — equipe não saiu' : e.justificativaTipo === 'ATRASO' ? 'Atraso' : 'Justificada',
-          linhas: quebrarTexto(e.justificativa?.trim() || 'Sem motivo informado', JUST_TEXT_W),
+          linhas: quebrarTexto(resumoJust(e.justificativaTipo, e.justificativa), JUST_TEXT_W),
         }));
       if (itens.length) justPorBase.set(b.baseNome, itens);
     }
@@ -2057,7 +2057,7 @@ async function exportarDetalhe() {
             txt(`+${eq.atrasoMin}m`, x0 + COL_W - 6, y0 + ROW_H / 2 + 4, 'bold 10px Arial', '#dc2626', 'right');
           }
         } else if (eq.status === 'justificado') {
-          const tipoTxt = eq.justificativaTipo === 'FALTA' ? 'falta' : eq.justificativaTipo === 'ATRASO' ? 'atraso' : '';
+          const tipoTxt = eq.justificativaTipo ? rotuloTipoJust(eq.justificativaTipo).toLowerCase() : '';
           txt(tipoTxt ? `justificado · ${tipoTxt}` : 'justificado', x0 + COL_W - 10, y0 + ROW_H / 2 + 4, 'bold 11px Arial', '#d97706', 'right');
         } else {
           txt('pendente', x0 + COL_W - 10, y0 + ROW_H / 2 + 4, '11px Arial', '#9ca3af', 'right');
@@ -2093,7 +2093,7 @@ async function exportarDetalhe() {
         txt('JUSTIFICATIVAS', PAD + 14, y + 17, 'bold 10px Arial', '#b45309');
         let jy = y + JUST_HEAD_H;
         for (const it of itensJust) {
-          txt(`${it.ident}  ·  ${it.tipo}`, PAD + 14, jy + 11, 'bold 11px Arial', '#78350f');
+          txt(it.ident, PAD + 14, jy + 11, 'bold 11px Arial', '#78350f');
           it.linhas.forEach((ln, i) => txt(ln, PAD + 14, jy + 11 + JUST_LINE_H * (i + 1), '11px Arial', '#475569'));
           jy += JUST_LINE_H * (1 + it.linhas.length) + JUST_ITEM_PAD;
         }

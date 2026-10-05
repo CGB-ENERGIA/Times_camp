@@ -101,8 +101,7 @@
               <div v-if="props.row.observacao" class="text-caption text-grey-6">{{ props.row.observacao }}</div>
               <div v-if="justificativas.get(props.row.equipeId)" class="text-caption text-orange">
                 <q-icon name="comment" size="12px" />
-                <strong>{{ justificativas.get(props.row.equipeId)?.tipo }}</strong>
-                — {{ justificativas.get(props.row.equipeId)?.motivo }}
+                <strong>{{ resumoJust(justificativas.get(props.row.equipeId)?.tipo, justificativas.get(props.row.equipeId)?.motivo) }}</strong>
               </div>
             </q-td>
             <q-td key="status" :props="props">
@@ -173,20 +172,39 @@
         <q-card-section class="q-gutter-md">
           <q-select
             v-model="tipoJust"
-            :options="[{ label: 'Falta — equipe não saiu', value: 'FALTA' }, { label: 'Atraso — equipe saiu depois do limite', value: 'ATRASO' }]"
+            :options="TIPOS_JUST"
             emit-value
             map-options
             label="Tipo de ocorrência"
             filled
+            @update:model-value="aoMudarTipo"
           />
-          <q-input
-            v-model="motivoJust"
+          <q-select
+            v-if="exigeMotivo(tipoJust)"
+            v-model="motivoSel"
+            :options="MOTIVOS_JUST"
+            emit-value
+            map-options
             label="Descrição do motivo"
+            filled
+            @update:model-value="aoMudarMotivo"
+          >
+            <template v-if="motivoSel === 'INTERJORNADA' && incNumero" #append>
+              <q-btn flat dense no-caps size="sm" color="orange" :label="`INC - ${incNumero}`" icon="edit" @click.stop="abrirDialogoInc" />
+            </template>
+          </q-select>
+          <q-input
+            v-if="exigeMotivo(tipoJust) && motivoSel === 'OUTRO'"
+            v-model="outroTexto"
+            label="Descreva o motivo"
             type="textarea"
             filled
             autogrow
-            :rows="3"
+            :rows="2"
           />
+          <div v-if="textoJustFinal" class="text-caption text-grey-6">
+            Será registrado: <strong class="text-orange">{{ textoJustFinal }}</strong>
+          </div>
         </q-card-section>
         <q-card-actions align="right">
           <q-btn flat label="Cancelar" v-close-popup />
@@ -194,9 +212,35 @@
             color="orange"
             label="Salvar justificativa"
             :loading="salvandoJust"
-            :disable="!tipoJust || !motivoJust.trim()"
+            :disable="!textoJustFinal"
             @click="salvarJustificativa"
           />
+        </q-card-actions>
+      </q-card>
+    </q-dialog>
+
+    <!-- Diálogo do número da INC (Interjornada) -->
+    <q-dialog v-model="dialogoIncAberto" persistent>
+      <q-card style="width: 340px; max-width: 90vw">
+        <q-card-section>
+          <div class="text-subtitle1">Interjornada</div>
+          <div class="text-caption text-grey-7">Informe o número da INC</div>
+        </q-card-section>
+        <q-card-section>
+          <q-input
+            v-model="incTemp"
+            prefix="INC -"
+            label="Número"
+            inputmode="numeric"
+            filled
+            autofocus
+            @update:model-value="(v) => (incTemp = String(v ?? '').replace(/\D/g, ''))"
+            @keyup.enter="confirmarInc"
+          />
+        </q-card-section>
+        <q-card-actions align="right">
+          <q-btn flat label="Cancelar" @click="cancelarInc" />
+          <q-btn color="orange" label="Confirmar" :disable="!incTemp" @click="confirmarInc" />
         </q-card-actions>
       </q-card>
     </q-dialog>
@@ -212,6 +256,15 @@ import gsap from 'gsap';
 import { api } from '@/boot/axios';
 import { useAuthStore } from '@/stores/auth';
 import { hojeStr, agoraStr } from '@/utils/date';
+import {
+  TIPOS_JUST,
+  MOTIVOS_JUST,
+  exigeMotivo,
+  montarJustificativa,
+  resumoJust,
+  type TipoJust,
+  type MotivoJust,
+} from '@/utils/justificativa';
 
 type Status = 'no_prazo' | 'atrasado' | 'pendente' | 'justificado';
 
@@ -358,9 +411,45 @@ const salvando = ref(false);
 // Diálogo de justificativa
 const dialogoJustAberto = ref(false);
 const equipeJust = ref<EquipeStatus | null>(null);
-const tipoJust = ref<'FALTA' | 'ATRASO' | null>(null);
-const motivoJust = ref('');
+const tipoJust = ref<TipoJust | null>(null);
+const motivoSel = ref<MotivoJust | null>(null);
+const outroTexto = ref('');
+const incNumero = ref('');
 const salvandoJust = ref(false);
+const dialogoIncAberto = ref(false);
+const incTemp = ref('');
+
+const textoJustFinal = computed(() =>
+  montarJustificativa(tipoJust.value, motivoSel.value, incNumero.value, outroTexto.value),
+);
+
+function aoMudarTipo() {
+  if (!exigeMotivo(tipoJust.value)) {
+    motivoSel.value = null;
+    outroTexto.value = '';
+    incNumero.value = '';
+  }
+}
+
+function aoMudarMotivo() {
+  if (motivoSel.value === 'INTERJORNADA') abrirDialogoInc();
+}
+
+function abrirDialogoInc() {
+  incTemp.value = incNumero.value;
+  dialogoIncAberto.value = true;
+}
+
+function confirmarInc() {
+  if (!incTemp.value) return;
+  incNumero.value = incTemp.value;
+  dialogoIncAberto.value = false;
+}
+
+function cancelarInc() {
+  dialogoIncAberto.value = false;
+  if (!incNumero.value) motivoSel.value = null;
+}
 
 function corStatus(status: Status) {
   return { no_prazo: 'positive', atrasado: 'negative', pendente: 'grey-6', justificado: 'info' }[status];
@@ -454,22 +543,26 @@ async function salvar() {
 function abrirJustificativa(equipe: EquipeStatus) {
   equipeJust.value = equipe;
   const existente = justificativas.value.get(equipe.equipeId);
-  tipoJust.value = (existente?.tipo ?? null) as 'FALTA' | 'ATRASO' | null;
-  motivoJust.value = existente?.motivo ?? '';
+  tipoJust.value = (existente?.tipo ?? null) as TipoJust | null;
+  // justificativa já gravada vira texto livre editável (o texto composto não é decomposto de volta)
+  motivoSel.value = existente && exigeMotivo(tipoJust.value) ? 'OUTRO' : null;
+  outroTexto.value = existente && exigeMotivo(tipoJust.value) ? existente.motivo : '';
+  incNumero.value = '';
   dialogoJustAberto.value = true;
 }
 
 async function salvarJustificativa() {
-  if (!equipeJust.value || !tipoJust.value || !motivoJust.value.trim()) return;
+  const texto = textoJustFinal.value;
+  if (!equipeJust.value || !tipoJust.value || !texto) return;
   salvandoJust.value = true;
   try {
     await api.post('/justificativas', {
       equipeId: equipeJust.value.equipeId,
       data: dataHoje,
       tipo: tipoJust.value,
-      motivo: motivoJust.value.trim(),
+      motivo: texto,
     });
-    justificativas.value.set(equipeJust.value.equipeId, { tipo: tipoJust.value, motivo: motivoJust.value.trim() });
+    justificativas.value.set(equipeJust.value.equipeId, { tipo: tipoJust.value, motivo: texto });
     dialogoJustAberto.value = false;
   } catch (err) {
     erroApi(err, 'Não foi possível salvar a justificativa.');

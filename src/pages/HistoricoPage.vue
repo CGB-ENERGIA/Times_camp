@@ -173,6 +173,7 @@ import ExcelJS from 'exceljs';
 import { api } from '@/boot/axios';
 import { hojeStr } from '@/utils/date';
 import { useAuthStore } from '@/stores/auth';
+import { resumoJust } from '@/utils/justificativa';
 
 interface Registro {
   chave: string;
@@ -206,7 +207,7 @@ interface JustificativaApi {
   id: number;
   equipe_id: number;
   data: string;
-  tipo: 'FALTA' | 'ATRASO';
+  tipo: string;
   motivo: string;
   registrado_por_nome: string;
   identificador: string;
@@ -243,7 +244,7 @@ async function buscarRegistros(params: { baseId?: number | undefined; dataInicio
       coordenador: j.coordenador,
       data: dia,
       hora_saida: '',
-      observacao: `${j.tipo === 'FALTA' ? 'Falta' : 'Atraso'}: ${j.motivo}`,
+      observacao: resumoJust(j.tipo, j.motivo),
       registrado_por_nome: j.registrado_por_nome,
     });
   }

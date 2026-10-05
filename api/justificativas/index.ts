@@ -3,6 +3,8 @@ import { sql } from '../_lib/db.js';
 import { requireAuth } from '../_lib/auth.js';
 import { podeAcessarEquipe } from '../_lib/acesso.js';
 
+const TIPOS_JUSTIFICATIVA = ['FALTA', 'ATRASO', 'FOLGA_COMPENSADA', 'FERIADO'];
+
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
     const session = requireAuth(req, res);
@@ -47,8 +49,8 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       res.status(400).json({ error: 'Informe equipe, data, tipo e motivo' });
       return;
     }
-    if (!['FALTA', 'ATRASO'].includes(tipo)) {
-      res.status(400).json({ error: 'Tipo deve ser FALTA ou ATRASO' });
+    if (!TIPOS_JUSTIFICATIVA.includes(tipo)) {
+      res.status(400).json({ error: `Tipo deve ser um de: ${TIPOS_JUSTIFICATIVA.join(', ')}` });
       return;
     }
 
