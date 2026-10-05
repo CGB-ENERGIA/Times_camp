@@ -21,18 +21,49 @@
         />
       </div>
       <div class="col-12 col-sm-3">
+        <q-select
+          v-model="filtroSupervisor"
+          :options="opcoesSupervisor"
+          multiple
+          use-chips
+          label="Supervisor"
+          filled
+          dense
+          clearable
+        />
+      </div>
+      <div class="col-12 col-sm-3">
+        <q-select
+          v-model="filtroCoordenador"
+          :options="opcoesCoordenador"
+          multiple
+          use-chips
+          label="Coordenador"
+          filled
+          dense
+          clearable
+        />
+      </div>
+      <div class="col-12 col-sm-3">
         <q-input v-model="dataInicio" type="date" label="De" filled dense @update:model-value="carregar" />
       </div>
       <div class="col-12 col-sm-3">
         <q-input v-model="dataFim" type="date" label="Até" filled dense @update:model-value="carregar" />
       </div>
-      <div class="col-12 col-sm-3 flex items-center">
-        <q-btn flat dense icon="refresh" :loading="carregando" @click="carregar" />
+      <div class="col-12 col-sm-6 flex items-center q-gutter-sm">
+        <q-btn flat dense icon="refresh" :loading="carregando" @click="carregar">
+          <q-tooltip>Recarregar</q-tooltip>
+        </q-btn>
+        <q-btn
+          v-if="filtroBaseId || filtroSupervisor.length || filtroCoordenador.length || dataInicio || dataFim"
+          flat dense no-caps icon="filter_alt_off" label="Limpar filtros" @click="limparFiltros"
+        />
+        <span class="text-caption text-grey-6">{{ registrosFiltrados.length }} registro(s)</span>
       </div>
     </div>
 
     <q-table
-      :rows="registros"
+      :rows="registrosFiltrados"
       :columns="colunasVisiveis"
       row-key="chave"
       :loading="carregando"
@@ -120,6 +151,8 @@
             <strong>{{ formatarDataBr(intervaloExportacao.fim) }}</strong>
             <br />
             Base: <strong>{{ baseFiltradaLabel }}</strong>
+            <template v-if="filtroSupervisor.length"><br />Supervisor: <strong>{{ filtroSupervisor.join(', ') }}</strong></template>
+            <template v-if="filtroCoordenador.length"><br />Coordenador: <strong>{{ filtroCoordenador.join(', ') }}</strong></template>
           </div>
         </q-card-section>
 
@@ -273,6 +306,42 @@ function confirmarExclusao(row: Registro) {
 }
 const opcoesBase = ref<Array<{ label: string; value: number }>>([]);
 const filtroBaseId = ref<number | null>(null);
+const filtroSupervisor = ref<string[]>([]);
+const filtroCoordenador = ref<string[]>([]);
+const equipesRef = ref<Array<{ supervisor: string | null; coordenador: string | null }>>([]);
+
+const opcoesSupervisor = computed(() =>
+  [...new Set(equipesRef.value.map((e) => e.supervisor).filter((v): v is string => !!v))].sort(),
+);
+// Coordenadores: se houver supervisor selecionado, mostra só os coordenadores desses supervisores
+const opcoesCoordenador = computed(() => {
+  const sups = filtroSupervisor.value;
+  return [
+    ...new Set(
+      equipesRef.value
+        .filter((e) => !sups.length || (e.supervisor && sups.includes(e.supervisor)))
+        .map((e) => e.coordenador)
+        .filter((v): v is string => !!v),
+    ),
+  ].sort();
+});
+
+function passaFiltroPessoa(r: Registro): boolean {
+  const okSup = !filtroSupervisor.value.length || (!!r.supervisor && filtroSupervisor.value.includes(r.supervisor));
+  const okCoord = !filtroCoordenador.value.length || (!!r.coordenador && filtroCoordenador.value.includes(r.coordenador));
+  return okSup && okCoord;
+}
+
+const registrosFiltrados = computed(() => registros.value.filter(passaFiltroPessoa));
+
+function limparFiltros() {
+  filtroBaseId.value = null;
+  filtroSupervisor.value = [];
+  filtroCoordenador.value = [];
+  dataInicio.value = '';
+  dataFim.value = '';
+  void carregar();
+}
 const dataInicio = ref('');
 const dataFim = ref('');
 const carregando = ref(false);
@@ -376,6 +445,8 @@ function abrirExportacao() {
 async function carregarBases() {
   const { data } = await api.get<BaseOpcao[]>('/bases');
   opcoesBase.value = data.map((b) => ({ label: b.nome, value: b.id }));
+  const eq = await api.get<Array<{ supervisor: string | null; coordenador: string | null }>>('/equipes');
+  equipesRef.value = eq.data;
 }
 
 async function carregar() {
@@ -395,12 +466,14 @@ async function exportarExcel() {
   exportando.value = true;
   try {
     const { inicio, fim } = intervaloExportacao.value;
-    const data = await buscarRegistros({
-      baseId: filtroBaseId.value || undefined,
-      dataInicio: inicio,
-      dataFim: fim,
-      limit: 10000,
-    });
+    const data = (
+      await buscarRegistros({
+        baseId: filtroBaseId.value || undefined,
+        dataInicio: inicio,
+        dataFim: fim,
+        limit: 10000,
+      })
+    ).filter(passaFiltroPessoa);
 
     if (data.length === 0) {
       $q.notify({ type: 'warning', message: 'Nenhum registro encontrado nesse período.' });
@@ -452,7 +525,7 @@ async function exportarExcel() {
     // Linha 2: subtítulo (período, base, geração)
     sheet.mergeCells(2, 1, 2, colunasExcel.length);
     const subtituloCel = sheet.getCell(2, 1);
-    subtituloCel.value = `Período: ${formatarDataBr(inicio)} a ${formatarDataBr(fim)}  ·  Base: ${baseFiltradaLabel.value}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`;
+    subtituloCel.value = `Período: ${formatarDataBr(inicio)} a ${formatarDataBr(fim)}  ·  Base: ${baseFiltradaLabel.value}${filtroSupervisor.value.length ? `  ·  Supervisor: ${filtroSupervisor.value.join(', ')}` : ''}${filtroCoordenador.value.length ? `  ·  Coordenador: ${filtroCoordenador.value.join(', ')}` : ''}  ·  Gerado em ${new Date().toLocaleString('pt-BR')}`;
     subtituloCel.font = { italic: true, size: 10, color: { argb: 'FF4B5563' } };
     sheet.getRow(2).height = 18;
 
