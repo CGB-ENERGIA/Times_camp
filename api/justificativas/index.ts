@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '../_lib/db.js';
 import { requireAuth } from '../_lib/auth.js';
+import { podeAcessarEquipe } from '../_lib/acesso.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
@@ -61,13 +62,9 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (session.role === 'tecnico' && (!session.supervisor || equipe.supervisor !== session.supervisor)) {
-      res.status(403).json({ error: 'Você só pode justificar equipes do seu supervisor' });
-      return;
-    }
-
-    if (session.role === 'coordenador' && (!session.coordenador || equipe.coordenador !== session.coordenador)) {
-      res.status(403).json({ error: 'Você só pode justificar equipes do seu coordenador' });
+    const acesso = await podeAcessarEquipe(session, equipe as { id: number; supervisor: string | null; coordenador: string | null });
+    if (!acesso.ok) {
+      res.status(403).json({ error: acesso.erro });
       return;
     }
 

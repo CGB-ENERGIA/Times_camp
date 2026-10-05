@@ -206,6 +206,8 @@
 <script setup lang="ts">
 import { ref, reactive, computed, watch, nextTick, onMounted } from 'vue';
 import type { QTableColumn } from 'quasar';
+import { useQuasar } from 'quasar';
+import axios from 'axios';
 import gsap from 'gsap';
 import { api } from '@/boot/axios';
 import { useAuthStore } from '@/stores/auth';
@@ -423,6 +425,13 @@ function abrirDialogo(equipe: EquipeStatus) {
   dialogoAberto.value = true;
 }
 
+const $q = useQuasar();
+
+function erroApi(err: unknown, padrao: string) {
+  const msg = axios.isAxiosError(err) ? (err.response?.data as { error?: string } | undefined)?.error : undefined;
+  $q.notify({ type: 'negative', message: msg || padrao });
+}
+
 async function salvar() {
   if (!equipeSelecionada.value) return;
   salvando.value = true;
@@ -435,6 +444,8 @@ async function salvar() {
     });
     dialogoAberto.value = false;
     await carregar();
+  } catch (err) {
+    erroApi(err, 'Não foi possível salvar a saída.');
   } finally {
     salvando.value = false;
   }
@@ -460,6 +471,8 @@ async function salvarJustificativa() {
     });
     justificativas.value.set(equipeJust.value.equipeId, { tipo: tipoJust.value, motivo: motivoJust.value.trim() });
     dialogoJustAberto.value = false;
+  } catch (err) {
+    erroApi(err, 'Não foi possível salvar a justificativa.');
   } finally {
     salvandoJust.value = false;
   }

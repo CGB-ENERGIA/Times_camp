@@ -2256,7 +2256,7 @@ async function exportarHeatmapCanvas(format: 'png' | 'pdf' = 'pdf') {
     for (const eq of grupo.equipes) {
       eq.celulas.forEach((c, i) => {
         if (c.status in cnt && !(c.status === 'vazio' && isWeekend(i)))
-          (cnt as Record<string, number>)[c.status]++;
+          (cnt as Record<string, number>)[c.status]! += 1;
       });
     }
     let bx = W - PAD - 4;

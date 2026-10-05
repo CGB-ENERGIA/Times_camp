@@ -1,6 +1,7 @@
 import type { VercelRequest, VercelResponse } from '@vercel/node';
 import { sql } from '../_lib/db.js';
 import { requireAuth } from '../_lib/auth.js';
+import { podeAcessarEquipe } from '../_lib/acesso.js';
 
 export default async function handler(req: VercelRequest, res: VercelResponse) {
   if (req.method === 'GET') {
@@ -50,28 +51,10 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       return;
     }
 
-    if (session.role === 'visualizador') {
-      res.status(403).json({ error: 'Visualizadores não podem registrar saídas' });
+    const acesso = await podeAcessarEquipe(session, equipe as { id: number; supervisor: string | null; coordenador: string | null });
+    if (!acesso.ok) {
+      res.status(403).json({ error: acesso.erro });
       return;
-    }
-
-    if (session.role === 'tecnico') {
-      const supervisores = session.supervisores?.length ? session.supervisores : (session.supervisor ? [session.supervisor] : []);
-      const equipesIds = session.equipesIds ?? [];
-      const podeByEquipe = equipesIds.includes(Number(equipe.id));
-      const podeBySupervisor = supervisores.includes(equipe.supervisor);
-      if (!podeByEquipe && !podeBySupervisor) {
-        res.status(403).json({ error: 'Você só pode registrar saídas de equipes dos seus supervisores ou equipes atribuídas diretamente' });
-        return;
-      }
-    }
-
-    if (session.role === 'coordenador') {
-      const coordenadores = session.coordenadores?.length ? session.coordenadores : (session.coordenador ? [session.coordenador] : []);
-      if (!coordenadores.includes(equipe.coordenador)) {
-        res.status(403).json({ error: 'Você só pode registrar saídas de equipes dos seus coordenadores' });
-        return;
-      }
     }
 
     const [registro] = await sql`
