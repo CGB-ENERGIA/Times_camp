@@ -34,7 +34,7 @@
     <q-table
       :rows="registros"
       :columns="colunasVisiveis"
-      row-key="id"
+      row-key="chave"
       :loading="carregando"
       flat
       bordered
@@ -47,8 +47,10 @@
       </template>
       <template #body-cell-acoes="props">
         <q-td :props="props" auto-width>
+          <template v-if="!props.row.justificado">
           <q-btn flat dense round icon="edit" size="sm" color="primary" @click="abrirEdicao(props.row)" />
           <q-btn flat dense round icon="delete" size="sm" color="negative" class="q-ml-xs" @click="confirmarExclusao(props.row)" />
+          </template>
         </q-td>
       </template>
     </q-table>
@@ -140,7 +142,9 @@ import { hojeStr } from '@/utils/date';
 import { useAuthStore } from '@/stores/auth';
 
 interface Registro {
+  chave: string;
   id: number;
+  justificado?: boolean;
   equipe_id: number;
   identificador: string;
   tipo: string;
@@ -164,6 +168,58 @@ const $q = useQuasar();
 const auth = useAuthStore();
 
 const registros = ref<Registro[]>([]);
+
+interface JustificativaApi {
+  id: number;
+  equipe_id: number;
+  data: string;
+  tipo: 'FALTA' | 'ATRASO';
+  motivo: string;
+  registrado_por_nome: string;
+  identificador: string;
+  equipe_tipo: string;
+  base_id: number;
+  base_nome: string;
+  horario_padrao_saida: string;
+  supervisor: string | null;
+  coordenador: string | null;
+}
+
+// Saídas + justificativas de equipes que não registraram saída no dia
+async function buscarRegistros(params: { baseId?: number | undefined; dataInicio?: string | undefined; dataFim?: string | undefined; limit?: number | undefined }): Promise<Registro[]> {
+  const [saidas, justs] = await Promise.all([
+    api.get<Registro[]>('/saidas', { params }),
+    api.get<JustificativaApi[]>('/justificativas', { params }),
+  ]);
+  const lista: Registro[] = saidas.data.map((s) => ({ ...s, data: s.data.slice(0, 10), chave: `s${s.id}` }));
+  const comSaida = new Set(lista.map((s) => `${s.equipe_id}|${s.data}`));
+  for (const j of justs.data) {
+    const dia = j.data.slice(0, 10);
+    if (comSaida.has(`${j.equipe_id}|${dia}`)) continue;
+    lista.push({
+      chave: `j${j.id}`,
+      id: j.id,
+      justificado: true,
+      equipe_id: j.equipe_id,
+      identificador: j.identificador,
+      tipo: j.equipe_tipo,
+      base_id: j.base_id,
+      base_nome: j.base_nome,
+      horario_padrao_saida: j.horario_padrao_saida,
+      supervisor: j.supervisor,
+      coordenador: j.coordenador,
+      data: dia,
+      hora_saida: '',
+      observacao: `${j.tipo === 'FALTA' ? 'Falta' : 'Atraso'}: ${j.motivo}`,
+      registrado_por_nome: j.registrado_por_nome,
+    });
+  }
+  return lista.sort((a, b) => {
+    if (a.data !== b.data) return b.data.localeCompare(a.data);
+    if (a.base_nome !== b.base_nome) return a.base_nome.localeCompare(b.base_nome);
+    return a.identificador.localeCompare(b.identificador);
+  });
+}
 
 // Edição
 const editDialogAberto = ref(false);
@@ -261,10 +317,12 @@ const colunasVisiveis = computed(() =>
 );
 
 function corStatus(row: Registro) {
+  if (row.justificado) return 'orange-8';
   return row.hora_saida <= row.horario_padrao_saida ? 'positive' : 'negative';
 }
 
 function labelStatus(row: Registro) {
+  if (row.justificado) return 'Justificado';
   return row.hora_saida <= row.horario_padrao_saida ? 'No prazo' : 'Atrasado';
 }
 
@@ -323,14 +381,11 @@ async function carregarBases() {
 async function carregar() {
   carregando.value = true;
   try {
-    const { data } = await api.get<Registro[]>('/saidas', {
-      params: {
-        baseId: filtroBaseId.value || undefined,
-        dataInicio: dataInicio.value || undefined,
-        dataFim: dataFim.value || undefined,
-      },
+    registros.value = await buscarRegistros({
+      baseId: filtroBaseId.value || undefined,
+      dataInicio: dataInicio.value || undefined,
+      dataFim: dataFim.value || undefined,
     });
-    registros.value = data;
   } finally {
     carregando.value = false;
   }
@@ -340,13 +395,11 @@ async function exportarExcel() {
   exportando.value = true;
   try {
     const { inicio, fim } = intervaloExportacao.value;
-    const { data } = await api.get<Registro[]>('/saidas', {
-      params: {
-        baseId: filtroBaseId.value || undefined,
-        dataInicio: inicio,
-        dataFim: fim,
-        limit: 10000,
-      },
+    const data = await buscarRegistros({
+      baseId: filtroBaseId.value || undefined,
+      dataInicio: inicio,
+      dataFim: fim,
+      limit: 10000,
     });
 
     if (data.length === 0) {
@@ -418,8 +471,9 @@ async function exportarExcel() {
 
     // Linhas de dados
     linhas.forEach((r) => {
-      const noPrazo = r.hora_saida <= r.horario_padrao_saida;
-      const atrasoMin = noPrazo ? 0 : toMinutos(r.hora_saida) - toMinutos(r.horario_padrao_saida);
+      const justificado = !!r.justificado;
+      const noPrazo = !justificado && r.hora_saida <= r.horario_padrao_saida;
+      const atrasoMin = noPrazo || justificado ? 0 : toMinutos(r.hora_saida) - toMinutos(r.horario_padrao_saida);
 
       const linha = sheet.addRow([
         formatarDataBr(r.data),
@@ -428,16 +482,16 @@ async function exportarExcel() {
         r.identificador,
         r.supervisor ?? '—',
         r.coordenador ?? '—',
-        r.hora_saida.slice(0, 5),
+        justificado ? '—' : r.hora_saida.slice(0, 5),
         r.horario_padrao_saida.slice(0, 5),
-        noPrazo ? 'No prazo' : 'Atrasado',
-        noPrazo ? 0 : atrasoMin,
+        justificado ? 'Justificado' : noPrazo ? 'No prazo' : 'Atrasado',
+        atrasoMin,
         r.registrado_por_nome,
         r.observacao ?? '',
       ]);
 
-      const corFundo = noPrazo ? 'FFE8F5E9' : 'FFFDECEA';
-      const corTexto = noPrazo ? 'FF1B6B1B' : 'FFB0362C';
+      const corFundo = justificado ? 'FFFFF4E0' : noPrazo ? 'FFE8F5E9' : 'FFFDECEA';
+      const corTexto = justificado ? 'FFB45309' : noPrazo ? 'FF1B6B1B' : 'FFB0362C';
       linha.eachCell((cell) => {
         cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: corFundo } };
         cell.border = { bottom: { style: 'hair', color: { argb: 'FFDDDDDD' } } };

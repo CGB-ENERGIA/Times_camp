@@ -9,29 +9,26 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
     if (!session) return;
 
     const data = (req.query.data as string) || null;
-    const dataInicio = (req.query.dataInicio as string) || null;
-    const dataFim = (req.query.dataFim as string) || null;
+    const dataInicio = (req.query.dataInicio as string) || data;
+    const dataFim = (req.query.dataFim as string) || data || dataInicio;
+    const baseId = req.query.baseId ? Number(req.query.baseId) : null;
+    const limite = Math.min(Math.max(Number(req.query.limit) || 1000, 1), 10000);
 
-    if (!data && !dataInicio) {
-      res.status(400).json({ error: 'Informe a data ou dataInicio' });
-      return;
-    }
-
-    const rows = dataInicio
-      ? await sql`
-          select j.id, j.equipe_id, j.data, j.tipo, j.motivo, u.nome as registrado_por_nome, j.updated_at
-          from justificativas j
-          join usuarios u on u.id = j.registrado_por
-          where j.data >= ${dataInicio} and j.data <= ${dataFim ?? dataInicio}
-          order by j.data desc, j.updated_at desc
-        `
-      : await sql`
-          select j.id, j.equipe_id, j.data, j.tipo, j.motivo, u.nome as registrado_por_nome, j.updated_at
-          from justificativas j
-          join usuarios u on u.id = j.registrado_por
-          where j.data = ${data}
-          order by j.updated_at desc
-        `;
+    const rows = await sql`
+      select
+        j.id, j.equipe_id, j.data, j.tipo, j.motivo, u.nome as registrado_por_nome, j.updated_at,
+        e.identificador, e.tipo as equipe_tipo, e.base_id, b.nome as base_nome,
+        e.horario_padrao_saida, e.supervisor, e.coordenador
+      from justificativas j
+      join usuarios u on u.id = j.registrado_por
+      join equipes e on e.id = j.equipe_id
+      join bases b on b.id = e.base_id
+      where (${dataInicio}::date is null or j.data >= ${dataInicio})
+        and (${dataFim}::date is null or j.data <= ${dataFim})
+        and (${baseId}::int is null or e.base_id = ${baseId})
+      order by j.data desc, b.nome, e.identificador
+      limit ${limite}
+    `;
     res.status(200).json(rows);
     return;
   }
