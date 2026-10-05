@@ -28,7 +28,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       b.id as base_id, b.nome as base_nome,
       e.id as equipe_id, e.tipo, e.identificador, e.horario_padrao_saida, e.supervisor, e.coordenador,
       s.hora_saida, s.observacao, u.nome as registrado_por_nome,
-      j.id as justificativa_id, j.motivo as justificativa
+      j.id as justificativa_id, j.motivo as justificativa, j.tipo as justificativa_tipo
     from bases b
     join equipes e on e.base_id = b.id and e.ativo = true
     left join saidas s on s.equipe_id = e.id and s.data = ${data}
@@ -55,6 +55,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
         registradoPor: string | null;
         justificativaId: number | null;
         justificativa: string | null;
+        justificativaTipo: string | null;
         status: 'no_prazo' | 'atrasado' | 'pendente' | 'justificado';
       }>;
     }
@@ -87,6 +88,7 @@ export default async function handler(req: VercelRequest, res: VercelResponse) {
       registradoPor: linha.registrado_por_nome,
       justificativaId: linha.justificativa_id ?? null,
       justificativa: linha.justificativa ?? null,
+      justificativaTipo: linha.justificativa_tipo ?? null,
       status,
     });
   }

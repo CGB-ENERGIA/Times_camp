@@ -381,11 +381,14 @@
                 :key="eq.equipeId"
                 class="equipe-chip"
                 :style="{ borderColor: CORES[eq.status], background: `${CORES[eq.status]}22` }"
-                :title="`${eq.identificador} · ${eq.horaSaida ? eq.horaSaida.slice(0,5) : labelStatus(eq.status)}${eq.atrasoMin ? ` · +${eq.atrasoMin}min` : ''}`"
+                :title="`${eq.identificador} · ${eq.horaSaida ? eq.horaSaida.slice(0,5) : labelStatus(eq.status)}${eq.atrasoMin ? ` · +${eq.atrasoMin}min` : ''}${eq.justificativa ? ` · ${eq.justificativa}` : ''}`"
               >
                 <span class="equipe-chip-id" :style="{ color: CORES[eq.status] }">{{ eq.identificador }}</span>
                 <span v-if="eq.horaSaida" class="equipe-chip-time">{{ eq.horaSaida.slice(0, 5) }}</span>
                 <span v-if="eq.atrasoMin" class="equipe-chip-atraso">+{{ eq.atrasoMin }}m</span>
+                <span v-if="eq.status === 'justificado' && eq.justificativa" class="equipe-chip-just">
+                  {{ eq.justificativaTipo === 'FALTA' ? 'Falta' : 'Atraso' }}: {{ eq.justificativa }}
+                </span>
               </div>
             </div>
           </div>
@@ -568,6 +571,8 @@ interface EquipeStatus {
   horaSaida: string | null;
   observacao: string | null;
   registradoPor: string | null;
+  justificativa: string | null;
+  justificativaTipo: 'FALTA' | 'ATRASO' | null;
   status: Status;
 }
 
@@ -1877,10 +1882,45 @@ async function exportarDetalhe() {
     const BASE_GAP = 20;       // espaço entre bases
 
     // altura total dinâmica
+    // bloco de justificativas (motivo por equipe), com quebra de linha
+    const JUST_HEAD_H = 26;
+    const JUST_LINE_H = 14;
+    const JUST_ITEM_PAD = 10;
+    const JUST_TEXT_W = IW - 28;
+    const medidor = document.createElement('canvas').getContext('2d')!;
+    medidor.font = '11px Arial';
+    function quebrarTexto(texto: string, maxW: number): string[] {
+      const palavras = texto.replace(/\s+/g, ' ').trim().split(' ');
+      const linhas: string[] = [];
+      let atual = '';
+      for (const p of palavras) {
+        const teste = atual ? `${atual} ${p}` : p;
+        if (medidor.measureText(teste).width > maxW && atual) { linhas.push(atual); atual = p; } else { atual = teste; }
+      }
+      if (atual) linhas.push(atual);
+      return linhas;
+    }
+    const justPorBase = new Map<string, Array<{ ident: string; tipo: string; linhas: string[] }>>();
+    for (const b of bases) {
+      const itens = b.equipes
+        .filter((e) => e.status === 'justificado')
+        .map((e) => ({
+          ident: e.identificador,
+          tipo: e.justificativaTipo === 'FALTA' ? 'Falta — equipe não saiu' : e.justificativaTipo === 'ATRASO' ? 'Atraso' : 'Justificada',
+          linhas: quebrarTexto(e.justificativa?.trim() || 'Sem motivo informado', JUST_TEXT_W),
+        }));
+      if (itens.length) justPorBase.set(b.baseNome, itens);
+    }
+    const alturaJust = (baseNome: string) => {
+      const itens = justPorBase.get(baseNome);
+      if (!itens) return 0;
+      return JUST_HEAD_H + itens.reduce((a, it) => a + JUST_LINE_H * (1 + it.linhas.length) + JUST_ITEM_PAD, 0) + 6;
+    };
+
     let totalH = H_HEADER + H_SUBTIT + PAD + H_FOOTER;
     for (const b of bases) {
       const nRows = Math.ceil(b.equipes.length / COLS);
-      totalH += BASE_HEAD_H + nRows * ROW_H + CALC_H + BASE_GAP;
+      totalH += BASE_HEAD_H + nRows * ROW_H + alturaJust(b.baseNome) + CALC_H + BASE_GAP;
     }
 
     const canvas = document.createElement('canvas');
@@ -2017,7 +2057,8 @@ async function exportarDetalhe() {
             txt(`+${eq.atrasoMin}m`, x0 + COL_W - 6, y0 + ROW_H / 2 + 4, 'bold 10px Arial', '#dc2626', 'right');
           }
         } else if (eq.status === 'justificado') {
-          txt('justificado', x0 + COL_W - 10, y0 + ROW_H / 2 + 4, 'bold 11px Arial', '#d97706', 'right');
+          const tipoTxt = eq.justificativaTipo === 'FALTA' ? 'falta' : eq.justificativaTipo === 'ATRASO' ? 'atraso' : '';
+          txt(tipoTxt ? `justificado · ${tipoTxt}` : 'justificado', x0 + COL_W - 10, y0 + ROW_H / 2 + 4, 'bold 11px Arial', '#d97706', 'right');
         } else {
           txt('pendente', x0 + COL_W - 10, y0 + ROW_H / 2 + 4, '11px Arial', '#9ca3af', 'right');
         }
@@ -2038,6 +2079,26 @@ async function exportarDetalhe() {
       ctx.stroke();
 
       y += nRows * ROW_H;
+
+      // ── Justificativas (motivo de cada equipe justificada) ──
+      const itensJust = justPorBase.get(base.baseNome);
+      if (itensJust) {
+        const hJust = alturaJust(base.baseNome);
+        ctx.fillStyle = '#fffbeb';
+        ctx.fillRect(PAD, y, IW, hJust);
+        ctx.strokeStyle = '#fcd34d'; ctx.lineWidth = 1;
+        ctx.strokeRect(PAD, y, IW, hJust);
+        ctx.fillStyle = '#d97706';
+        ctx.fillRect(PAD, y, 4, hJust);
+        txt('JUSTIFICATIVAS', PAD + 14, y + 17, 'bold 10px Arial', '#b45309');
+        let jy = y + JUST_HEAD_H;
+        for (const it of itensJust) {
+          txt(`${it.ident}  ·  ${it.tipo}`, PAD + 14, jy + 11, 'bold 11px Arial', '#78350f');
+          it.linhas.forEach((ln, i) => txt(ln, PAD + 14, jy + 11 + JUST_LINE_H * (i + 1), '11px Arial', '#475569'));
+          jy += JUST_LINE_H * (1 + it.linhas.length) + JUST_ITEM_PAD;
+        }
+        y += hJust;
+      }
 
       // ── Box de cálculo da média ──
       if (media !== null) {
@@ -2638,6 +2699,14 @@ onUnmounted(() => {
   color: #d03b3b;
   font-size: 0.7rem;
   font-weight: 600;
+}
+
+.equipe-chip-just {
+  color: #d97706;
+  font-size: 0.7rem;
+  font-weight: 600;
+  max-width: 280px;
+  white-space: normal;
 }
 
 .heatmap-limite-swatch {
